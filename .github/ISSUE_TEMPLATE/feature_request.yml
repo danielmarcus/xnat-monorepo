@@ -1,0 +1,73 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for XNAT
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an improvement to XNAT!
+
+        Before submitting, please search [existing issues](../../issues) to see if this has
+        already been requested or is actively being worked on.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: A clear and concise description of the feature or enhancement you would like to see.
+      placeholder: Describe the feature...
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation / Use Case
+      description: |
+        Why is this feature needed? What problem does it solve?
+        Describe the use case and who would benefit from it.
+      placeholder: |
+        As a [researcher / admin / developer], I need to...
+        Currently I work around this by...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: If you have ideas about how this could be implemented, describe them here. This is optional but helpful.
+      placeholder: I think this could be implemented by...
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you have considered, and why they do not fully address the use case.
+      placeholder: I also considered... but it doesn't work because...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (from your perspective)
+      options:
+        - Low — nice to have
+        - Medium — would improve my workflow
+        - High — blocking my work
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, mockups, or references that may be helpful.
+    validations:
+      required: false

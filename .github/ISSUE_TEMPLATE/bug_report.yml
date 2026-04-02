@@ -1,0 +1,116 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in XNAT
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug. Please fill in as much detail as possible
+        so we can reproduce and fix the issue quickly.
+
+        Before submitting, please search [existing issues](../../issues) to avoid duplicates.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug.
+      placeholder: Describe what is going wrong...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the behavior.
+      placeholder: |
+        1. Navigate to '...'
+        2. Click on '...'
+        3. Observe error '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen.
+      placeholder: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: A clear and concise description of what actually happened. Include any error messages, stack traces, or screenshots.
+      placeholder: What actually happened? Paste error messages or stack traces here.
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: "## Environment"
+
+  - type: input
+    id: java-version
+    attributes:
+      label: Java Version
+      description: Output of `java -version`
+      placeholder: e.g., OpenJDK 21.0.3
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating System
+      options:
+        - Linux (Ubuntu/Debian)
+        - Linux (RHEL/CentOS/Rocky)
+        - Linux (other)
+        - macOS
+        - Windows
+        - Docker (Linux container)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS Version
+      description: Specific OS version or distribution release
+      placeholder: e.g., Ubuntu 22.04, macOS 14.4, Windows 11
+    validations:
+      required: false
+
+  - type: input
+    id: xnat-version
+    attributes:
+      label: XNAT Version
+      description: The XNAT release or commit SHA where the bug was observed
+      placeholder: e.g., 1.9.2 or commit abc1234
+    validations:
+      required: true
+
+  - type: input
+    id: database
+    attributes:
+      label: Database Version
+      description: PostgreSQL version in use
+      placeholder: e.g., PostgreSQL 15.3
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem (logs, configuration snippets, related issues).
+    validations:
+      required: false

@@ -1,0 +1,26 @@
+# CODEOWNERS
+#
+# This file defines code ownership for the XNAT monorepo.
+# Owners are automatically requested for review when a pull request
+# modifies files they own.
+#
+# Syntax: <pattern> <owner> [<owner> ...]
+# Patterns follow the same rules as .gitignore.
+# The last matching pattern takes precedence.
+#
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything in the repo
+*                   @danielmarcus
+
+# XNAT Web Application
+/apps/web/          @danielmarcus
+
+# Shared Libraries
+/libs/              @danielmarcus
+
+# Gradle Build Logic (convention plugins, version catalogs)
+/build-logic/       @danielmarcus
+
+# GitHub Actions workflows and configuration
+/.github/           @danielmarcus
