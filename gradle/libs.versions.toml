@@ -1,0 +1,432 @@
+# =============================================================================
+# XNAT Monorepo — Gradle Version Catalog
+# Single authoritative source for all dependency and plugin versions.
+# =============================================================================
+
+[versions]
+
+# ---------------------------------------------------------------------------
+# XNAT
+# ---------------------------------------------------------------------------
+xnat = "1.10.0-RC2-SNAPSHOT"
+
+# ---------------------------------------------------------------------------
+# Spring Framework / Security / Extensions
+# ---------------------------------------------------------------------------
+spring-framework    = "5.3.39"
+spring-security     = "5.7.13"
+spring-ldap         = "2.4.2"
+spring-oauth2       = "2.5.2.RELEASE"
+spring-jwt          = "1.1.1.RELEASE"
+io-projectreactor   = "2.0.8.RELEASE"
+
+# ---------------------------------------------------------------------------
+# Hibernate / JPA / Validation
+# ---------------------------------------------------------------------------
+hibernate           = "5.6.15.Final"
+hibernate-validator = "5.4.3.Final"
+vladmihalcea-hibernate-types = "2.14.0"
+
+# ---------------------------------------------------------------------------
+# Jackson
+# ---------------------------------------------------------------------------
+jackson = "2.13.5"
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+slf4j     = "1.7.30"
+logback   = "1.2.13"
+logstash  = "5.3"
+
+# ---------------------------------------------------------------------------
+# Messaging
+# ---------------------------------------------------------------------------
+activemq = "5.16.7"
+
+# ---------------------------------------------------------------------------
+# DICOM / Medical Imaging
+# ---------------------------------------------------------------------------
+dcm4che2  = "2.0.29"
+dcm4che5  = "5.33.1"
+pixelmed  = "nrg-20200327"
+
+# ---------------------------------------------------------------------------
+# Scripting / Dynamic Languages
+# ---------------------------------------------------------------------------
+groovy   = "2.4.20"
+graaljs  = "23.1.0"
+jython   = "2.7.3"
+
+# ---------------------------------------------------------------------------
+# Cache / Session
+# ---------------------------------------------------------------------------
+ehcache3  = "3.10.8"
+redisson  = "3.22.0"
+
+# ---------------------------------------------------------------------------
+# Database / Connection Pooling
+# ---------------------------------------------------------------------------
+hikaricp     = "4.0.3"
+hsqldb       = "2.7.4"
+h2           = "2.2.224"
+postgresql   = "42.7.3"
+datasource-proxy = "1.6"
+
+# ---------------------------------------------------------------------------
+# Scheduling
+# ---------------------------------------------------------------------------
+quartz = "2.3.2"
+
+# ---------------------------------------------------------------------------
+# Parser / Code Generation
+# ---------------------------------------------------------------------------
+antlr3 = "3.5.3"
+antlr4 = "4.13.2"
+
+# ---------------------------------------------------------------------------
+# Apache Commons
+# ---------------------------------------------------------------------------
+commons-lang3          = "3.11"
+commons-io             = "2.15.1"
+commons-collections    = "3.2.2"
+commons-compress       = "1.26.0"
+commons-configuration  = "1.10"
+commons-configuration2 = "2.10.1"
+commons-codec          = "1.10"
+commons-fileupload     = "1.5"
+commons-beanutils      = "1.9.4"
+commons-pool2          = "2.9.0"
+
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
+guava        = "32.1.3-jre"
+lombok       = "1.18.34"
+auto-value   = "1.7.4"
+reflections  = "0.10.2"
+snakeyaml    = "1.33"
+dom4j        = "2.1.4"
+bouncycastle = "1.78.1"
+javassist    = "3.24.0-GA"
+cglib        = "2.2.2"
+restlet      = "1.1.10"
+swagger      = "2.9.2"
+eclipse-jgit = "5.13.3.202401111512-r"
+javamelody   = "1.91.0"
+msv          = "2013.6.1"
+
+# ---------------------------------------------------------------------------
+# Servlet / Web / AOP
+# ---------------------------------------------------------------------------
+servlet-api = "3.1.0"
+aspectj     = "1.8.10"
+ant         = "1.9.8"
+tomcat-embed = "9.0.93"
+
+# ---------------------------------------------------------------------------
+# Testing
+# ---------------------------------------------------------------------------
+junit4          = "4.13.2"
+junit-jupiter   = "5.8.1"
+mockito         = "5.7.0"
+assertj         = "3.26.3"
+testcontainers  = "1.21.4"
+jacoco          = "0.8.10"
+
+
+# =============================================================================
+[libraries]
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Spring Framework
+# ---------------------------------------------------------------------------
+spring-core                   = { module = "org.springframework:spring-core",                    version.ref = "spring-framework" }
+spring-beans                  = { module = "org.springframework:spring-beans",                   version.ref = "spring-framework" }
+spring-context                = { module = "org.springframework:spring-context",                 version.ref = "spring-framework" }
+spring-context-support        = { module = "org.springframework:spring-context-support",         version.ref = "spring-framework" }
+spring-aop                    = { module = "org.springframework:spring-aop",                     version.ref = "spring-framework" }
+spring-aspects                = { module = "org.springframework:spring-aspects",                 version.ref = "spring-framework" }
+spring-expression             = { module = "org.springframework:spring-expression",              version.ref = "spring-framework" }
+spring-jdbc                   = { module = "org.springframework:spring-jdbc",                    version.ref = "spring-framework" }
+spring-orm                    = { module = "org.springframework:spring-orm",                     version.ref = "spring-framework" }
+spring-tx                     = { module = "org.springframework:spring-tx",                      version.ref = "spring-framework" }
+spring-web                    = { module = "org.springframework:spring-web",                     version.ref = "spring-framework" }
+spring-webmvc                 = { module = "org.springframework:spring-webmvc",                  version.ref = "spring-framework" }
+spring-websocket              = { module = "org.springframework:spring-websocket",               version.ref = "spring-framework" }
+spring-messaging              = { module = "org.springframework:spring-messaging",               version.ref = "spring-framework" }
+spring-test                   = { module = "org.springframework:spring-test",                    version.ref = "spring-framework" }
+spring-oxm                    = { module = "org.springframework:spring-oxm",                     version.ref = "spring-framework" }
+spring-jms                    = { module = "org.springframework:spring-jms",                     version.ref = "spring-framework" }
+
+# Spring Security
+spring-security-core          = { module = "org.springframework.security:spring-security-core",          version.ref = "spring-security" }
+spring-security-config        = { module = "org.springframework.security:spring-security-config",        version.ref = "spring-security" }
+spring-security-web           = { module = "org.springframework.security:spring-security-web",           version.ref = "spring-security" }
+spring-security-ldap          = { module = "org.springframework.security:spring-security-ldap",          version.ref = "spring-security" }
+spring-security-taglibs       = { module = "org.springframework.security:spring-security-taglibs",       version.ref = "spring-security" }
+spring-security-test          = { module = "org.springframework.security:spring-security-test",          version.ref = "spring-security" }
+spring-security-crypto        = { module = "org.springframework.security:spring-security-crypto",        version.ref = "spring-security" }
+spring-security-acl           = { module = "org.springframework.security:spring-security-acl",           version.ref = "spring-security" }
+spring-security-aspects       = { module = "org.springframework.security:spring-security-aspects",       version.ref = "spring-security" }
+
+# Spring LDAP
+spring-ldap-core              = { module = "org.springframework.ldap:spring-ldap-core",                  version.ref = "spring-ldap" }
+spring-ldap-core-tiger        = { module = "org.springframework.ldap:spring-ldap-core-tiger",            version.ref = "spring-ldap" }
+
+# Spring Security OAuth2
+spring-security-oauth2        = { module = "org.springframework.security.oauth:spring-security-oauth2",  version.ref = "spring-oauth2" }
+
+# Spring Security JWT
+spring-security-jwt           = { module = "org.springframework.security:spring-security-jwt",           version.ref = "spring-jwt" }
+
+# Project Reactor (Spring)
+io-projectreactor-core        = { module = "io.projectreactor:reactor-core",                             version.ref = "io-projectreactor" }
+
+# ---------------------------------------------------------------------------
+# Hibernate / JPA / Validation
+# ---------------------------------------------------------------------------
+hibernate-core                = { module = "org.hibernate:hibernate-core",                      version.ref = "hibernate" }
+hibernate-entitymanager       = { module = "org.hibernate:hibernate-entitymanager",             version.ref = "hibernate" }
+hibernate-envers              = { module = "org.hibernate:hibernate-envers",                    version.ref = "hibernate" }
+hibernate-c3p0                = { module = "org.hibernate:hibernate-c3p0",                      version.ref = "hibernate" }
+hibernate-ehcache             = { module = "org.hibernate:hibernate-ehcache",                   version.ref = "hibernate" }
+hibernate-jcache              = { module = "org.hibernate:hibernate-jcache",                     version.ref = "hibernate" }
+hibernate-validator           = { module = "org.hibernate:hibernate-validator",                  version.ref = "hibernate-validator" }
+vladmihalcea-hibernate-types  = { module = "com.vladmihalcea:hibernate-types-52",               version.ref = "vladmihalcea-hibernate-types" }
+vladmihalcea-hibernate-typesFiftyFive = { module = "com.vladmihalcea:hibernate-types-55",        version.ref = "vladmihalcea-hibernate-types" }
+
+# ---------------------------------------------------------------------------
+# Jackson
+# ---------------------------------------------------------------------------
+jackson-databind               = { module = "com.fasterxml.jackson.core:jackson-databind",               version.ref = "jackson" }
+jackson-core                   = { module = "com.fasterxml.jackson.core:jackson-core",                   version.ref = "jackson" }
+jackson-annotations            = { module = "com.fasterxml.jackson.core:jackson-annotations",            version.ref = "jackson" }
+jackson-dataformat-xml         = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-xml",   version.ref = "jackson" }
+jackson-dataformat-yaml        = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml",  version.ref = "jackson" }
+jackson-dataformat-csv         = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-csv",   version.ref = "jackson" }
+jackson-datatype-jsr310        = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",    version.ref = "jackson" }
+jackson-datatype-jdk8          = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jdk8",      version.ref = "jackson" }
+jackson-datatype-guava         = { module = "com.fasterxml.jackson.datatype:jackson-datatype-guava",     version.ref = "jackson" }
+jackson-module-kotlin          = { module = "com.fasterxml.jackson.module:jackson-module-kotlin",        version.ref = "jackson" }
+jackson-module-parameter-names = { module = "com.fasterxml.jackson.module:jackson-module-parameter-names", version.ref = "jackson" }
+jackson-datatype-hibernate5    = { module = "com.fasterxml.jackson.datatype:jackson-datatype-hibernate5",  version.ref = "jackson" }
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+slf4j-api             = { module = "org.slf4j:slf4j-api",                         version.ref = "slf4j" }
+slf4j-simple          = { module = "org.slf4j:slf4j-simple",                      version.ref = "slf4j" }
+jcl-over-slf4j        = { module = "org.slf4j:jcl-over-slf4j",                   version.ref = "slf4j" }
+jul-to-slf4j          = { module = "org.slf4j:jul-to-slf4j",                     version.ref = "slf4j" }
+log4j-over-slf4j      = { module = "org.slf4j:log4j-over-slf4j",                 version.ref = "slf4j" }
+logback-classic       = { module = "ch.qos.logback:logback-classic",             version.ref = "logback" }
+logback-core          = { module = "ch.qos.logback:logback-core",                version.ref = "logback" }
+logstash-encoder      = { module = "net.logstash.logback:logstash-logback-encoder", version.ref = "logstash" }
+
+# ---------------------------------------------------------------------------
+# Messaging — ActiveMQ
+# ---------------------------------------------------------------------------
+activemq-broker       = { module = "org.apache.activemq:activemq-broker",        version.ref = "activemq" }
+activemq-client       = { module = "org.apache.activemq:activemq-client",        version.ref = "activemq" }
+activemq-spring       = { module = "org.apache.activemq:activemq-spring",        version.ref = "activemq" }
+activemq-pool         = { module = "org.apache.activemq:activemq-pool",          version.ref = "activemq" }
+activemq-kahadb-store = { module = "org.apache.activemq:activemq-kahadb-store",  version.ref = "activemq" }
+activemq-jdbc-store   = { module = "org.apache.activemq:activemq-jdbc-store",    version.ref = "activemq" }
+
+# ---------------------------------------------------------------------------
+# DICOM / Medical Imaging
+# ---------------------------------------------------------------------------
+dcm4che2-core         = { module = "dcm4che:dcm4che-core",                       version.ref = "dcm4che2" }
+dcm4che2-image        = { module = "dcm4che:dcm4che-image",                      version.ref = "dcm4che2" }
+dcm4che2-imageio      = { module = "dcm4che:dcm4che-imageio",                    version.ref = "dcm4che2" }
+dcm4che2-iod          = { module = "dcm4che:dcm4che-iod",                        version.ref = "dcm4che2" }
+dcm4che2-net          = { module = "dcm4che:dcm4che-net",                        version.ref = "dcm4che2" }
+dcm4che2-imageio-rle  = { module = "dcm4che:dcm4che-imageio-rle",               version.ref = "dcm4che2" }
+dcm4che5-core         = { module = "org.dcm4che:dcm4che-core",                   version.ref = "dcm4che5" }
+dcm4che5-image        = { module = "org.dcm4che:dcm4che-image",                  version.ref = "dcm4che5" }
+dcm4che5-imageio      = { module = "org.dcm4che:dcm4che-imageio",                version.ref = "dcm4che5" }
+dcm4che5-net          = { module = "org.dcm4che:dcm4che-net",                    version.ref = "dcm4che5" }
+pixelmed-codec        = { module = "com.dclunie:pixelmed-codec",                 version = "20200328" }
+
+# ---------------------------------------------------------------------------
+# Scripting / Dynamic Languages
+# ---------------------------------------------------------------------------
+groovy-all            = { module = "org.codehaus.groovy:groovy-all",             version.ref = "groovy" }
+groovy-core           = { module = "org.codehaus.groovy:groovy",                 version.ref = "groovy" }
+graaljs-polyglot      = { module = "org.graalvm.polyglot:polyglot",              version.ref = "graaljs" }
+graaljs-js-language   = { module = "org.graalvm.polyglot:js-community",          version.ref = "graaljs" }
+jython-standalone     = { module = "org.python:jython-standalone",               version.ref = "jython" }
+
+# ---------------------------------------------------------------------------
+# Cache
+# ---------------------------------------------------------------------------
+ehcache3              = { module = "org.ehcache:ehcache",                        version.ref = "ehcache3" }
+redisson              = { module = "org.redisson:redisson",                      version.ref = "redisson" }
+redisson-spring       = { module = "org.redisson:redisson-spring-data-27",       version.ref = "redisson" }
+
+# ---------------------------------------------------------------------------
+# Database / Connection Pooling
+# ---------------------------------------------------------------------------
+hikaricp              = { module = "com.zaxxer:HikariCP",                        version.ref = "hikaricp" }
+hsqldb                = { module = "org.hsqldb:hsqldb",                          version.ref = "hsqldb" }
+h2                    = { module = "com.h2database:h2",                          version.ref = "h2" }
+postgresql            = { module = "org.postgresql:postgresql",                  version.ref = "postgresql" }
+datasource-proxy      = { module = "net.ttddyy:datasource-proxy",               version.ref = "datasource-proxy" }
+
+# ---------------------------------------------------------------------------
+# Scheduling
+# ---------------------------------------------------------------------------
+quartz                = { module = "org.quartz-scheduler:quartz",                version.ref = "quartz" }
+quartz-jobs           = { module = "org.quartz-scheduler:quartz-jobs",           version.ref = "quartz" }
+
+# ---------------------------------------------------------------------------
+# Parser / Code Generation
+# ---------------------------------------------------------------------------
+antlr3-runtime        = { module = "org.antlr:antlr-runtime",                   version.ref = "antlr3" }
+antlr3-tool           = { module = "org.antlr:antlr",                           version.ref = "antlr3" }
+antlr4-runtime        = { module = "org.antlr:antlr4-runtime",                  version.ref = "antlr4" }
+antlr4-tool           = { module = "org.antlr:antlr4",                          version.ref = "antlr4" }
+
+# ---------------------------------------------------------------------------
+# Apache Commons
+# ---------------------------------------------------------------------------
+commons-lang3         = { module = "org.apache.commons:commons-lang3",           version.ref = "commons-lang3" }
+commons-io            = { module = "commons-io:commons-io",                      version.ref = "commons-io" }
+commons-collections   = { module = "commons-collections:commons-collections",    version.ref = "commons-collections" }
+commons-compress      = { module = "org.apache.commons:commons-compress",        version.ref = "commons-compress" }
+commons-configuration = { module = "commons-configuration:commons-configuration", version.ref = "commons-configuration" }
+commons-configuration2 = { module = "org.apache.commons:commons-configuration2", version.ref = "commons-configuration2" }
+commons-codec         = { module = "commons-codec:commons-codec",                version.ref = "commons-codec" }
+commons-fileupload    = { module = "commons-fileupload:commons-fileupload",      version.ref = "commons-fileupload" }
+commons-beanutils     = { module = "commons-beanutils:commons-beanutils",        version.ref = "commons-beanutils" }
+commons-pool2         = { module = "org.apache.commons:commons-pool2",           version.ref = "commons-pool2" }
+
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
+guava                 = { module = "com.google.guava:guava",                     version.ref = "guava" }
+lombok                = { module = "org.projectlombok:lombok",                   version.ref = "lombok" }
+auto-value            = { module = "com.google.auto.value:auto-value",           version.ref = "auto-value" }
+auto-value-annotations = { module = "com.google.auto.value:auto-value-annotations", version.ref = "auto-value" }
+reflections           = { module = "org.reflections:reflections",                version.ref = "reflections" }
+snakeyaml             = { module = "org.yaml:snakeyaml",                         version.ref = "snakeyaml" }
+dom4j                 = { module = "org.dom4j:dom4j",                            version.ref = "dom4j" }
+bouncycastle-bcprov   = { module = "org.bouncycastle:bcprov-jdk18on",            version.ref = "bouncycastle" }
+bouncycastle-bcpkix   = { module = "org.bouncycastle:bcpkix-jdk18on",           version.ref = "bouncycastle" }
+javassist             = { module = "org.javassist:javassist",                    version.ref = "javassist" }
+cglib                 = { module = "cglib:cglib",                                version.ref = "cglib" }
+cglib-nodep           = { module = "cglib:cglib-nodep",                         version.ref = "cglib" }
+restlet               = { module = "org.restlet:org.restlet",                    version.ref = "restlet" }
+swagger-springmvc     = { module = "io.springfox:springfox-swagger2",            version.ref = "swagger" }
+swagger-ui            = { module = "io.springfox:springfox-swagger-ui",          version.ref = "swagger" }
+eclipse-jgit          = { module = "org.eclipse.jgit:org.eclipse.jgit",         version.ref = "eclipse-jgit" }
+javamelody-spring     = { module = "net.bull.javamelody:javamelody-spring-boot-starter", version.ref = "javamelody" }
+msv-core              = { module = "net.java.dev.msv:msv-core",                  version.ref = "msv" }
+
+# ---------------------------------------------------------------------------
+# Servlet / Web / AOP
+# ---------------------------------------------------------------------------
+javax-servlet-api     = { module = "javax.servlet:javax.servlet-api",            version.ref = "servlet-api" }
+aspectjrt             = { module = "org.aspectj:aspectjrt",                      version.ref = "aspectj" }
+aspectjweaver         = { module = "org.aspectj:aspectjweaver",                  version.ref = "aspectj" }
+ant                   = { module = "org.apache.ant:ant",                         version.ref = "ant" }
+tomcat-embed-core     = { module = "org.apache.tomcat.embed:tomcat-embed-core",  version.ref = "tomcat-embed" }
+tomcat-embed-jasper   = { module = "org.apache.tomcat.embed:tomcat-embed-jasper", version.ref = "tomcat-embed" }
+tomcat-embed-websocket = { module = "org.apache.tomcat.embed:tomcat-embed-websocket", version.ref = "tomcat-embed" }
+
+# ---------------------------------------------------------------------------
+# Testing
+# ---------------------------------------------------------------------------
+junit4                    = { module = "junit:junit",                                         version.ref = "junit4" }
+junit-jupiter-api         = { module = "org.junit.jupiter:junit-jupiter-api",                version.ref = "junit-jupiter" }
+junit-jupiter-engine      = { module = "org.junit.jupiter:junit-jupiter-engine",             version.ref = "junit-jupiter" }
+junit-jupiter-params      = { module = "org.junit.jupiter:junit-jupiter-params",             version.ref = "junit-jupiter" }
+junit-vintage-engine      = { module = "org.junit.vintage:junit-vintage-engine",             version.ref = "junit-jupiter" }
+mockito-core              = { module = "org.mockito:mockito-core",                           version.ref = "mockito" }
+mockito-junit-jupiter     = { module = "org.mockito:mockito-junit-jupiter",                  version.ref = "mockito" }
+assertj-core              = { module = "org.assertj:assertj-core",                           version.ref = "assertj" }
+testcontainers-core       = { module = "org.testcontainers:testcontainers",                  version.ref = "testcontainers" }
+testcontainers-junit      = { module = "org.testcontainers:junit-jupiter",                   version.ref = "testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:postgresql",                      version.ref = "testcontainers" }
+
+
+# =============================================================================
+[bundles]
+# =============================================================================
+
+# Convenience bundles — import multiple related libraries in one declaration.
+
+spring-web-stack = [
+    "spring-core",
+    "spring-beans",
+    "spring-context",
+    "spring-web",
+    "spring-webmvc",
+    "spring-aop",
+    "spring-tx",
+]
+
+spring-data-stack = [
+    "spring-jdbc",
+    "spring-orm",
+    "spring-tx",
+    "hibernate-core",
+    "hikaricp",
+]
+
+spring-security-stack = [
+    "spring-security-core",
+    "spring-security-config",
+    "spring-security-web",
+]
+
+jackson-core-stack = [
+    "jackson-databind",
+    "jackson-core",
+    "jackson-annotations",
+    "jackson-datatype-jsr310",
+    "jackson-module-parameter-names",
+]
+
+logging-stack = [
+    "slf4j-api",
+    "logback-classic",
+    "jcl-over-slf4j",
+    "jul-to-slf4j",
+]
+
+commons-stack = [
+    "commons-lang3",
+    "commons-io",
+    "commons-collections",
+    "commons-codec",
+    "commons-beanutils",
+]
+
+testing-unit-stack = [
+    "junit-jupiter-api",
+    "junit-jupiter-params",
+    "mockito-core",
+    "mockito-junit-jupiter",
+    "assertj-core",
+]
+
+testing-integration-stack = [
+    "testcontainers-core",
+    "testcontainers-junit",
+    "testcontainers-postgresql",
+    "spring-test",
+    "spring-security-test",
+]
+
+
+# =============================================================================
+[plugins]
+# =============================================================================
+
+spring-dependency-management = { id = "io.spring.dependency-management",  version = "1.1.7" }
+freefair-lombok               = { id = "io.freefair.lombok",               version = "9.1.0" }
+palantir-git-version          = { id = "com.palantir.git-version",         version = "4.2.0" }
+task-tree                     = { id = "com.dorongold.task-tree",          version = "4.0.1" }

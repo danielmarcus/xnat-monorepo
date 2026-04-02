@@ -31,6 +31,7 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Hashtable;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -90,7 +91,8 @@ public abstract class BaseXnatResourcecatalog extends AutoXnatResourcecatalog {
 			final CatalogUtils.CatalogData catalogData;
 			try {
 				catalogData = CatalogUtils.CatalogData.getOrCreate(rootPath, this, null);
-				for (CatEntryI entry : catalogData.catBean.getEntries_entry()) {
+				final List<CatEntryI> entries = catalogData.catBean.getEntries_entry();
+				for (CatEntryI entry : entries) {
 					File temp = CatalogUtils.getFile(entry, catalogData.catPath, catalogData.project);
 					if (temp != null) {
 						filesMap.put(temp, entry);
@@ -149,7 +151,8 @@ public abstract class BaseXnatResourcecatalog extends AutoXnatResourcecatalog {
 	}
 
     public static void backupEntry(CatalogUtils.CatalogData catalogData, UserI user, EventMetaI c, String timestamp) throws IOException {
-		for(CatEntryI entry: catalogData.catBean.getEntries_entry()){
+		final List<CatEntryI> backupEntries = catalogData.catBean.getEntries_entry();
+		for(CatEntryI entry: backupEntries){
 			final File f = CatalogUtils.getFile(entry, catalogData.catPath, catalogData.project);
 			if (f == null) {
 				continue;
