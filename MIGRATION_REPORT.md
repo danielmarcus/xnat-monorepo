@@ -118,7 +118,7 @@ Git history was not preserved in the monorepo (flat import of source tree).
 | Issue | Module(s) | Severity | Status |
 |-------|-----------|----------|--------|
 | `xnat-data-models` partial compilation — not all XSD-derived Java classes are generated | `build-tools/xnat-data-models` | Medium | Open — `web-stubs` provides workaround |
-| `web-stubs` are manually maintained stub interfaces | `build-tools/web-stubs` | Low | Open — requires resolving xdat circular dep |
+| `web-stubs` return types mismatch causes runtime linkage errors — `ArcSpecManager.GetInstance()` returns `ArcSpecManager` in stubs but `ArcArchivespecification` in real code, causing `NoSuchMethodError` at runtime for project creation and user initialization | `build-tools/web-stubs`, `build-tools/xnat-data-models` | **High** | Open — resolving the circular dependency is required for full runtime compatibility. Smoke tests 1-3 (health check, admin login, user creation) pass; tests 4-7 fail due to this linkage issue. |
 | DicomEdit4/6 artifact coordinate change may break downstream consumers | `libs/dicom-edit4`, `libs/dicom-edit6` | Medium | Communication sent to known downstream maintainers |
 | Integration tests disabled in CI (require running XNAT instance) | `apps/web`, smoke-tests | Low | Tracked — smoke tests run against Docker Compose stack |
 | XNAT runtime SLF4J/logback mismatch — fixed by forcing SLF4J 1.7.36 | `apps/web` | **Resolved** | Fixed — SLF4J 2.x was pulled in transitively; forced to 1.7.36 to match logback-classic 1.2.13 |
