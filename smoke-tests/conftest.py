@@ -70,7 +70,9 @@ def admin_session(base_url: str, admin_credentials: dict[str, str]) -> Session:
     The session is shared across all tests in the run.
     """
     session = requests.Session()
-    session.headers.update({"Accept": "application/json"})
+    # NOTE: Do NOT set Accept: application/json globally.
+    # XNAT's Restlet-based /data/ endpoints return 406 with that header.
+    # Use ?format=json query param instead for those endpoints.
 
     login_url = f"{base_url}/data/services/auth"
     response = session.post(

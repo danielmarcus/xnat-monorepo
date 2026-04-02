@@ -100,10 +100,16 @@ class TestUserCreation:
         self, base_url: str, admin_session: requests.Session, test_username: str
     ) -> None:
         """GET /xapi/users/{username} must return the newly created user."""
-        response = admin_session.get(
-            f"{base_url}/xapi/users/{test_username}",
-            timeout=30,
-        )
+        import time
+        # XNAT initializes users asynchronously — retry on 500.
+        for attempt in range(6):
+            response = admin_session.get(
+                f"{base_url}/xapi/users/{test_username}",
+                timeout=30,
+            )
+            if response.status_code == 200:
+                break
+            time.sleep(5)
         assert response.status_code == 200, (
             f"GET user failed: HTTP {response.status_code}. Body: {response.text[:500]}"
         )
