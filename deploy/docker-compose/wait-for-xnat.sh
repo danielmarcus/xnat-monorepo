@@ -68,7 +68,8 @@ while true; do
         --max-time "$INTERVAL" \
         --location \
         "${probe_url}" 2>/dev/null); then
-    if [[ "$http_code" == "200" ]]; then
+    # XNAT is ready if we get 200 (public endpoint) or 401 (requires auth — means app is running)
+    if [[ "$http_code" == "200" || "$http_code" == "401" || "$http_code" == "302" ]]; then
       log "XNAT is ready (HTTP ${http_code})."
       exit 0
     fi
