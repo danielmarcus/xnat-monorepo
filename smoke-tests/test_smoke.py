@@ -266,9 +266,10 @@ class TestCleanup:
         admin_session: requests.Session,
         test_username: str,
     ) -> None:
-        """DELETE /xapi/users/{username} must return 200."""
-        response = admin_session.delete(
-            f"{base_url}/xapi/users/{test_username}",
+        """Disable the test user (XNAT does not support hard-delete via REST)."""
+        # XNAT doesn't support DELETE on users — disable instead
+        response = admin_session.put(
+            f"{base_url}/xapi/users/{test_username}/enabled/false",
             timeout=30,
         )
         assert response.status_code == 200, (
@@ -281,12 +282,16 @@ class TestCleanup:
         admin_session: requests.Session,
         test_username: str,
     ) -> None:
-        """GET /xapi/users/{username} after deletion must return 404."""
+        """GET /xapi/users/{username} after disable must show enabled=false."""
         response = admin_session.get(
             f"{base_url}/xapi/users/{test_username}",
             timeout=30,
         )
-        assert response.status_code == 404, (
-            f"Expected 404 after user deletion, "
+        assert response.status_code == 200, (
+            f"Expected 200 for disabled user, "
             f"got {response.status_code}. Body: {response.text[:200]}"
+        )
+        data = response.json()
+        assert data.get("enabled") is False, (
+            f"Expected user to be disabled, got enabled={data.get('enabled')}"
         )
