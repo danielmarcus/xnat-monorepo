@@ -26,9 +26,9 @@ import requests
 # ---------------------------------------------------------------------------
 
 class TestHealthCheck:
-    def test_site_config_returns_200(self, base_url: str) -> None:
-        """GET /xapi/siteConfig must return HTTP 200 without authentication."""
-        response = requests.get(
+    def test_site_config_returns_200(self, base_url: str, admin_session: Session) -> None:
+        """GET /xapi/siteConfig must return HTTP 200 with admin authentication."""
+        response = admin_session.get(
             f"{base_url}/xapi/siteConfig",
             timeout=30,
         )
