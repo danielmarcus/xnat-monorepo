@@ -1,0 +1,268 @@
+package org.nrg.xnat.utils;
+
+
+import lombok.extern.slf4j.Slf4j;
+import org.hamcrest.Matchers;
+import org.junit.*;
+import org.junit.rules.ExpectedException;
+import org.junit.runner.RunWith;
+import org.mockito.Mockito;
+import org.nrg.test.workers.resources.ResourceManager;
+import org.nrg.xdat.bean.CatCatalogBean;
+import org.nrg.xdat.bean.CatEntryBean;
+import org.nrg.xdat.bean.ClassMappingFactory;
+import org.nrg.xdat.model.CatEntryI;
+import org.nrg.xdat.preferences.SiteConfigPreferences;
+import org.nrg.xnat.helpers.resource.XnatResourceInfo;
+import org.nrg.xnat.junit.ConcurrentJunitRunner;
+
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.*;
+
+
+@RunWith(ConcurrentJunitRunner.class)
+@Slf4j
+public class TestThreadAndProcessFileLock {
+
+    private static final File TMPDIR = new File("/tmp/catalogs/");
+    private static File TEST_CATALOG_FILE;
+    private static File TEST_DCMCATALOG;
+    private static File TEST_DCMCATALOG_PERM;
+    private static Object savedPreferences;
+
+    private static final String fakeProject = null;
+
+    @BeforeClass
+    public static void setup() throws Exception {
+        // Replace cached PREFERENCES with a mock that returns a writable temp path,
+        // preventing getCachePath() from using a non-writable path like /data/xnat/cache
+        // that may have been set by a prior test's Spring context
+        Field prefsField = ThreadAndProcessFileLock.class.getDeclaredField("PREFERENCES");
+        prefsField.setAccessible(true);
+        savedPreferences = prefsField.get(null);
+        SiteConfigPreferences mockPrefs = Mockito.mock(SiteConfigPreferences.class);
+        Mockito.when(mockPrefs.getCachePath()).thenReturn(System.getProperty("java.io.tmpdir"));
+        prefsField.set(null, mockPrefs);
+
+        TMPDIR.mkdirs();
+
+        final String catFilename = "DEBUG_OUTPUT_catalog.xml";
+        final String dcmFilename = "scan_4_catalog.xml";
+        final String subdir = "catalogs";
+
+        File permFile = ResourceManager.getInstance().getTestResourceFile(
+                Path.of(subdir, catFilename).toString());
+        TEST_CATALOG_FILE = new File(TMPDIR, catFilename);
+        rewriteFileWithCatalogUtils(permFile);
+        copyCatalog(TEST_CATALOG_FILE, permFile);
+
+        TEST_DCMCATALOG_PERM = ResourceManager.getInstance().getTestResourceFile(
+                Path.of(subdir, dcmFilename).toString());
+        TEST_DCMCATALOG = new File(TMPDIR, dcmFilename);
+
+        rewriteFileWithCatalogUtils(TEST_DCMCATALOG_PERM);
+        copyCatalog(TEST_DCMCATALOG, TEST_DCMCATALOG_PERM);
+
+        // Need to do this for the multithreading to work
+        ClassMappingFactory.getInstance().getElements();
+
+        // Stub getChecksumConfiguration check
+        Field privateField = CatalogUtils.class.getDeclaredField("_checksumConfig");
+        privateField.setAccessible(true);
+        privateField.set(null, new AtomicBoolean(false));
+        assertEquals(false, CatalogUtils.getChecksumConfiguration());
+    }
+
+    private static void rewriteFileWithCatalogUtils(File catFile) throws Exception {
+        // We have to read & write the file once to ensure the checksum is constant for our tests
+        // (the way the test resources are "compiled" adds a newline at end of file, which writeCatalogToFile strips)
+        CatalogUtils.CatalogData catalogData = new CatalogUtils.CatalogData(catFile, fakeProject,false);
+        CatalogUtils.writeCatalogToFile(catalogData, false,
+                new HashMap<String, Map<String, Integer>>());
+    }
+
+    private static void copyCatalog(File catFile, File permFile) throws Exception {
+        // Copy perm file to test location
+        catFile.mkdirs();
+        Files.copy(permFile.toPath(), catFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    @AfterClass
+    public static void cleanup() throws Exception {
+        org.apache.commons.io.FileUtils.deleteDirectory(TMPDIR);
+
+        // Restore cached PREFERENCES for other tests
+        Field prefsField = ThreadAndProcessFileLock.class.getDeclaredField("PREFERENCES");
+        prefsField.setAccessible(true);
+        prefsField.set(null, savedPreferences);
+    }
+
+    @Test
+    @Ignore
+    public void testCatalog() throws Exception {
+        doReadWrite(TEST_CATALOG_FILE);
+    }
+
+    @Test
+    @Ignore
+    public void testCatalogRepeat() throws Exception {
+        doReadWrite(TEST_CATALOG_FILE);
+    }
+
+    @Test
+    @Ignore
+    public void testCatalogRepeat2() throws Exception {
+        doReadWrite(TEST_CATALOG_FILE);
+    }
+
+    @Test
+    public void testDcm() throws Exception {
+        doReadWrite(TEST_DCMCATALOG);
+    }
+
+    @Test
+    public void testDcmRepeat() throws Exception {
+        doReadWrite(TEST_DCMCATALOG);
+    }
+
+    @Test
+    public void testDcmRepeat2() throws Exception {
+        doReadWrite(TEST_DCMCATALOG);
+    }
+
+    @Test
+    public void testEntryDelete() throws Exception {
+        // This operates on a separate file from testDcm/testDcmRepeat so it doesn't change their data mid-test
+        File outfile = new File(TMPDIR,"testEntryDelete_tmp_dcm_catalog.xml");
+        Files.copy(TEST_DCMCATALOG_PERM.toPath(), outfile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+        CatalogUtils.CatalogData catalogData = new CatalogUtils.CatalogData(outfile, fakeProject,false);
+        int size = catalogData.catBean.getEntries_entry().size();
+        CatEntryBean entry = (CatEntryBean) CatalogUtils.getEntryByURI(catalogData.catBean, "TESTID.MR.999.4.53.20080618.133713.agkqek.dcm");
+        assertNotNull(entry);
+        CatalogUtils.removeEntry(catalogData.catBean, entry);
+        CatalogUtils.writeCatalogToFile(catalogData);
+
+        CatalogUtils.CatalogData catalogData2 = new CatalogUtils.CatalogData(outfile, fakeProject, false);
+        assertThat(catalogData2.catBean.getEntries_entry().size(), is(size-1));
+        entry = (CatEntryBean) CatalogUtils.getEntryByURI(catalogData2.catBean, "TESTID.MR.999.4.38.20080618.133713.1va8eb6.dcm");
+        assertNotNull(entry);
+        CatalogUtils.removeEntry(catalogData2.catBean, entry);
+        CatalogUtils.writeCatalogToFile(catalogData2);
+
+        CatCatalogBean cat2 = CatalogUtils.getCatalog(outfile, fakeProject);
+        assertNotNull(cat2);
+        assertThat(cat2.getEntries_entry().size(), is(size-2));
+    }
+
+    @Rule
+    public ExpectedException exceptionRule = ExpectedException.none();
+
+    @Test
+    public void testConcurrentWriteThrowsException() throws Exception {
+        // This operates on a separate file from testDcm/testDcmRepeat so it doesn't change their data mid-test
+        File outfile = new File(TMPDIR,"testConcurrentWriteThrowsException_tmp_dcm_catalog.xml");
+        Files.copy(TEST_DCMCATALOG_PERM.toPath(), outfile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+        // Read in the catalog and do things
+        CatalogUtils.CatalogData catalogData = new CatalogUtils.CatalogData(outfile, fakeProject,false);
+        CatEntryBean entry = (CatEntryBean) CatalogUtils.getEntryByURI(catalogData.catBean,
+                "TESTID.MR.999.4.53.20080618.133713.agkqek.dcm");
+        assertNotNull(entry);
+        CatalogUtils.removeEntry(catalogData.catBean, entry);
+
+        // While one process/thread/user is doing things, another reads the unchanged catalog
+        CatalogUtils.CatalogData catalogData2 = new CatalogUtils.CatalogData(outfile, fakeProject,false);
+
+        // The original process/thread/user writes the modified catalog
+        CatalogUtils.writeCatalogToFile(catalogData);
+
+        // The second is still doing his thing, unaware that the catalog file has changed
+        entry = (CatEntryBean) CatalogUtils.getEntryByURI(catalogData2.catBean,
+                "TESTID.MR.999.4.38.20080618.133713.1va8eb6.dcm");
+        assertNotNull(entry);
+        CatalogUtils.removeEntry(catalogData2.catBean, entry);
+
+        // And when the second process/thread/user tries to write his version of the catalog, an exception should be thrown
+        exceptionRule.expect(ConcurrentModificationException.class);
+        exceptionRule.expectMessage("Another thread or process modified " + catalogData2.catFile +
+                " since I last read it or I don't have a previous checksum to compare. To avoid overwriting changes, " +
+                "I'm throwing an exception.");
+        CatalogUtils.writeCatalogToFile(catalogData2);
+    }
+
+    @Test
+    public void testRewriteOnSameObject() throws Exception {
+        // This operates on a separate file from testDcm/testDcmRepeat so it doesn't change their data mid-test
+        File outfile = new File(TMPDIR,"testRewriteOnSameObject_catalog.xml");
+        String fakeName = "testRewriteOnSameObject.txt";
+        File fakeFile = new File(TMPDIR, fakeName);
+        fakeFile.createNewFile();
+
+        CatalogUtils.CatalogData catalogData = new CatalogUtils.CatalogData(outfile, fakeProject); //creates catalog
+        CatalogUtils.writeCatalogToFile(catalogData); //saves new & empty catalog
+        XnatResourceInfo mockInfo = Mockito.mock(XnatResourceInfo.class);
+        CatalogUtils.addOrUpdateEntry(catalogData, null, fakeName, fakeName,
+                fakeFile, mockInfo, null);
+        // main test is to ensure that no exception is thrown here
+        CatalogUtils.writeCatalogToFile(catalogData);
+
+        // but then also, let's check that we added the item
+        CatalogUtils.CatalogData catalogData2 = new CatalogUtils.CatalogData(outfile, fakeProject);
+        assertThat(catalogData2.catBean.getEntries_entry(), Matchers.<CatEntryI>hasSize(1));
+    }
+
+    @Test
+    public void testConcurrentRead() throws Exception {
+        final ThreadAndProcessFileLock fl = ThreadAndProcessFileLock.getThreadAndProcessFileLock(TEST_CATALOG_FILE, true);
+        try {
+            try {
+                fl.tryLock(1L, TimeUnit.SECONDS);
+            } catch (IOException e) {
+                fail("Unable to obtain single read lock");
+            }
+
+            List<ThreadAndProcessFileLock> tounlock = new ArrayList<>();
+            for (int i = 0; i < 10; i++) {
+                final ThreadAndProcessFileLock fl2 = ThreadAndProcessFileLock.getThreadAndProcessFileLock(TEST_CATALOG_FILE, true);
+                try {
+                    fl2.tryLock(1L, TimeUnit.SECONDS);
+                    tounlock.add(fl2);
+                } catch (IOException e) {
+                    fail("Unable to obtain concurrent read lock " + i + ": " + e.getMessage());
+                }
+            }
+
+            for (ThreadAndProcessFileLock lock : tounlock) {
+                lock.unlock();
+            }
+        } finally {
+            fl.unlock();
+            ThreadAndProcessFileLock.removeThreadAndProcessFileLock(TEST_CATALOG_FILE);
+        }
+    }
+
+    private void doReadWrite(File file) throws Exception {
+        // Read the shared file
+        CatalogUtils.CatalogData catalogData = new CatalogUtils.CatalogData(file, fakeProject,false);
+
+        // Write to the shared file (without changing anything)
+        CatalogUtils.writeCatalogToFile(catalogData, false,
+                new HashMap<String, Map<String, Integer>>());
+
+        // Read it again - since we didn't actually mod anything, it better match
+        CatCatalogBean cat2 = CatalogUtils.getCatalog(file, fakeProject);
+        assertNotNull(cat2);
+        assertEquals(catalogData.catBean.toString(), cat2.toString());
+    }
+}
