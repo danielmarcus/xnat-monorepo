@@ -1,0 +1,22 @@
+/*
+ * xnat-data-builder: settings.gradle
+ * XNAT https://www.xnat.org
+ * Copyright (c) 2021, Washington University School of Medicine
+ * All Rights Reserved
+ *
+ * Released under the Simplified BSD.
+ */
+
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        maven { url "https://nrgxnat.jfrog.io/nrgxnat/gradle-plugins-release" }
+        maven { url "https://nrgxnat.jfrog.io/nrgxnat/gradle-plugins-snapshot" }
+        maven { url "https://nrgxnat.jfrog.io/nrgxnat/libs-release" }
+        maven { url "https://nrgxnat.jfrog.io/nrgxnat/libs-snapshot" }
+        mavenCentral()
+    }
+}
+
+rootProject.name = "xnat-data-builder"
