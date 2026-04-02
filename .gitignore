@@ -1,0 +1,9 @@
+*.diff
+*.iml
+*.log
+.classpath
+.idea
+.project
+.settings
+dep*.txt
+target
