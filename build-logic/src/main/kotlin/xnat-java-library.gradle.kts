@@ -67,6 +67,8 @@ tasks.withType<Javadoc>().configureEach {
     (options as StandardJavadocDocletOptions).apply {
         addStringOption("Xdoclint:none", "-quiet")
     }
+    // Don't fail the build on javadoc errors (generated code often has issues)
+    isFailOnError = false
 }
 
 // ---------------------------------------------------------------------------
