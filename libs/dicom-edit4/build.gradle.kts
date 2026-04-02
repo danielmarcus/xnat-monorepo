@@ -68,6 +68,11 @@ tasks.named<JavaCompile>("compileJava") {
     dependsOn(tasks.generateGrammarSource)
 }
 
-tasks.named("sourcesJar") {
+tasks.named<Jar>("sourcesJar") {
+    dependsOn(tasks.generateGrammarSource)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.named("javadocJar") {
     dependsOn(tasks.generateGrammarSource)
 }
