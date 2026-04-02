@@ -1,0 +1,16 @@
+.classpath
+.project
+.externalToolBuilders
+*.DS_Store
+._*
+.settings
+Thumbs.db
+build
+target
+.gradle
+.idea
+*.iml
+~$
+*.log
+*.orig
+dep*.txt
