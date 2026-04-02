@@ -104,6 +104,8 @@ def admin_session(base_url: str, admin_credentials: dict[str, str]) -> Session:
     # Complete XNAT first-time initialization if not already done.
     # On a fresh database, XNAT requires POST /xapi/siteConfig with
     # initialized=true before the API is fully functional.
+    import time
+
     init_check = session.get(f"{base_url}/xapi/siteConfig/initialized", timeout=30)
     if init_check.status_code == 200 and init_check.text.strip().lower() == "false":
         init_payload = {
@@ -123,6 +125,12 @@ def admin_session(base_url: str, admin_credentials: dict[str, str]) -> Session:
             json=init_payload,
             timeout=30,
         )
+        # Wait for XNAT to finish background initialization (schema setup, etc.)
+        for _ in range(30):
+            time.sleep(5)
+            check = session.get(f"{base_url}/xapi/users", timeout=30)
+            if check.status_code == 200:
+                break
 
     yield session
 
