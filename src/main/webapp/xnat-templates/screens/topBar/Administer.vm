@@ -1,0 +1,19 @@
+<!-- Sequence: 40 -->
+
+<li id="administer_link"><a href="#adminbox">Administer</a>
+    <ul class="administer_link_list">
+        #addGlobalCustomScreens("topBar/Administer")
+    </ul>
+</li>
+
+<script>
+ $(document).ready(function(){
+    var administerLinkList = $('ul.administer_link_list');
+    var links = administerLinkList.find('li').length;
+    var hiddenLinks = administerLinkList.find('li.hidden').length;
+    var openLinks = links - hiddenLinks;
+    if(!openLinks) {
+        $('#administer_link').hide();
+      }
+  });
+</script>
