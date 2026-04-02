@@ -1,0 +1,13 @@
+.idea
+/target
+*.iml
+*.log
+/.settings
+/bin/
+/ide-bin/
+.classpath
+.project
+/src/main/antlr4/org/nrg/dicom/dicomedit/DE6Lexer.tokens
+src/main/antlr4/org/nrg/dicom/dicomedit/gen
+/gen/
+**/.DS_Store
