@@ -48,6 +48,7 @@ services:
       CATALINA_OPTS: >-
         -Xms512m
         -Xmx2g
+        -Xss512k
         -Dxnat.home=/data/xnat/home
         -Dxnat.config=/data/xnat/home/config/xnat-conf.properties
     volumes:

@@ -53,6 +53,15 @@ RUN mkdir -p \
     ${XNAT_ROOT}/prearchive \
     ${XNAT_ROOT}/inbox
 
+# ----- Tomcat tuning for XNAT -----
+# Skip scanning JARs with cyclic inheritance (BouncyCastle) to avoid StackOverflowError,
+# and skip other large JARs that don't contain annotations to speed up startup.
+RUN sed -i 's/^tomcat.util.scan.StandardJarScanFilter.jarsToSkip=\\/&\nbcpkix-*.jar,bcprov-*.jar,bcutil-*.jar,\\/' \
+    ${CATALINA_HOME}/conf/catalina.properties
+
+# Increase default stack size for annotation scanning
+ENV JDK_JAVA_OPTIONS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED"
+
 # ----- helper scripts -----
 COPY make-xnat-config.sh /usr/local/bin/make-xnat-config.sh
 COPY wait-for-postgres.sh /usr/local/bin/wait-for-postgres.sh

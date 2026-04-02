@@ -28,6 +28,7 @@ services:
       CATALINA_OPTS: >-
         -Xms256m
         -Xmx1g
+        -Xss512k
         -Dxnat.home=/data/xnat/home
         -Dxnat.config=/data/xnat/home/config/xnat-conf.properties
     # In CI the WAR is staged by the build step; no persistent volumes
