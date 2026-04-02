@@ -101,6 +101,29 @@ def admin_session(base_url: str, admin_credentials: dict[str, str]) -> Session:
     if xnat_csrf:
         session.cookies.set("XNAT_CSRF", xnat_csrf)
 
+    # Complete XNAT first-time initialization if not already done.
+    # On a fresh database, XNAT requires POST /xapi/siteConfig with
+    # initialized=true before the API is fully functional.
+    init_check = session.get(f"{base_url}/xapi/siteConfig/initialized", timeout=30)
+    if init_check.status_code == 200 and init_check.text.strip().lower() == "false":
+        init_payload = {
+            "siteId": "XNAT",
+            "siteUrl": base_url,
+            "adminEmail": "admin@example.com",
+            "archivePath": "/data/xnat/archive",
+            "prearchivePath": "/data/xnat/prearchive",
+            "cachePath": "/data/xnat/cache",
+            "buildPath": "/data/xnat/build",
+            "ftpPath": "/data/xnat/ftp",
+            "pipelinePath": "/data/xnat/pipeline",
+            "initialized": True,
+        }
+        session.post(
+            f"{base_url}/xapi/siteConfig",
+            json=init_payload,
+            timeout=30,
+        )
+
     yield session
 
     # Logout on teardown
