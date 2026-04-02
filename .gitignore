@@ -1,0 +1,17 @@
+*.iml
+*.log
+.classpath
+.gradle*
+.idea/
+.project
+.settings/
+_*.bat
+_*.sh
+bin/
+/build/
+dep*.txt
+git.properties
+gradle.properties
+ide-bin/
+lib/
+out/
