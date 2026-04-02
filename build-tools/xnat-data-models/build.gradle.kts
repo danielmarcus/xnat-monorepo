@@ -26,19 +26,9 @@ configurations.configureEach {
     exclude(module = "slf4j-log4j12")
 }
 
-// Known circular dependency: xnat-data-models <-> apps/web
-// The hand-written Base* and generated Screen* files reference web classes.
-// We use isFailOnError=false so javac produces class files for the ~1100 files
-// that DO compile cleanly (beans, models, auto-generated classes).
-// The ~25 files with web references produce warnings but no class files.
-// This is documented in MIGRATION_REPORT.md.
-tasks.withType<JavaCompile>().configureEach {
-    options.isFailOnError = false
-}
-
 dependencies {
-    // --- Circular dependency stubs (provides a subset of web classes) ---
-    compileOnly(project(":build-tools:web-stubs"))
+    // --- Shared API classes (replaces build-tools:web-stubs) ---
+    compileOnly(project(":libs:xnat-api"))
 
     // --- Internal modules (non-transitive where noted) ---
     implementation(project(":libs:xdat")) {

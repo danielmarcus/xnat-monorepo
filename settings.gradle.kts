@@ -67,6 +67,7 @@ include(":libs:framework")
 include(":libs:dicomtools")
 include(":libs:xdat")
 include(":libs:spawner")
+include(":libs:xnat-api")
 
 // === DICOM libraries ===
 include(":libs:dicom-edit4")
@@ -80,7 +81,6 @@ include(":libs:dicom-xnat:dicom-xnat-mx")
 include(":libs:prearc-importer")
 
 // === Build tools (non-plugin modules) ===
-include(":build-tools:web-stubs")
 include(":build-tools:xnat-data-models")
 
 // === Application ===

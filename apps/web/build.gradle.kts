@@ -80,6 +80,7 @@ dependencies {
     // --- Internal modules (api) ---
     api(project(":libs:xdat"))
     api(project(":build-tools:xnat-data-models"))
+    api(project(":libs:xnat-api"))
     api(project(":libs:framework"))
 
     // --- Internal modules (implementation) ---

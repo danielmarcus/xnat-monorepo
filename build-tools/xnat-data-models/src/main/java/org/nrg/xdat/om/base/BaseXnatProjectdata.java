@@ -770,7 +770,7 @@ public class BaseXnatProjectdata extends AutoXnatProjectdata implements Archivab
     }
 
     public ArcProject getArcSpecification() {
-        return ArcSpecManager.GetInstance().getProjectArc(getId());
+        return (ArcProject)ArcSpecManager.GetInstance().getProjectArc(getId());
     }
 
     public static Comparator GetComparator() {

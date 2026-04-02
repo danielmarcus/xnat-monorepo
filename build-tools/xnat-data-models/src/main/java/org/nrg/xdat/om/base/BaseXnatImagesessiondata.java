@@ -2805,7 +2805,7 @@ public abstract class BaseXnatImagesessiondata extends AutoXnatImagesessiondata 
 		try {
 			//check if the user can modify data in this project
 			if(Permissions.canEdit(user, this.getItem().getXSIType()+"/project", this.getProject())){
-			ArcProject p=ArcSpecManager.GetInstance().getProjectArc(this.getProject());
+			ArcProject p=(ArcProject)ArcSpecManager.GetInstance().getProjectArc(this.getProject());
 				if(p!=null){
 					//look for the matching pipeline in this project
 					ArcPipelinedataI pipe=p.getPipelineForDescendant(this.getItem().getXSIType(), pipelineStep);
@@ -2822,7 +2822,7 @@ public abstract class BaseXnatImagesessiondata extends AutoXnatImagesessiondata 
 				try {
 					//check if the user can modify data in this project
 					if(Permissions.canEdit(user, this.getItem().getXSIType()+"/project", this.getProject())){
-						ArcProject p=ArcSpecManager.GetInstance().getProjectArc(share.getProject());
+						ArcProject p=(ArcProject)ArcSpecManager.GetInstance().getProjectArc(share.getProject());
 						if(p!=null){
 							//look for the matching pipeline in this project
 							ArcPipelinedataI pipe=p.getPipelineForDescendant(this.getItem().getXSIType(), pipelineStep);
