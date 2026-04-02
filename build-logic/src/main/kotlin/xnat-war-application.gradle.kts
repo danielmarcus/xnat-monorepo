@@ -26,6 +26,7 @@ plugins {
 configurations.all {
     resolutionStrategy {
         force("io.projectreactor:reactor-core:2.0.8.RELEASE")
+        force("org.slf4j:slf4j-api:1.7.36")
     }
 }
 
@@ -76,7 +77,7 @@ tasks.named<War>("war") {
     )
 
     manifest {
-        attributes(
+        val attrs = mutableMapOf<String, Any?>(
             "Implementation-Title"   to project.name,
             "Implementation-Version" to project.version,
             "Implementation-Vendor"  to "Washington University in St. Louis / NRG",
@@ -85,6 +86,13 @@ tasks.named<War>("war") {
             "Created-By"             to "Gradle ${gradle.gradleVersion}",
             "Main-Class"             to "org.nrg.xnat.XnatApplication",
         )
+        // XNAT-required manifest attributes (XnatAppInfo reads these at startup)
+        attrs["Build-Date"]             = providers.exec { commandLine("date", "+%Y-%m-%d %H:%M:%S") }.standardOutput.asText.get().trim()
+        attrs["Implementation-Sha"]     = project.findProperty("gitSha") ?: "unknown"
+        attrs["Implementation-Branch"]  = project.findProperty("gitBranch") ?: "main"
+        attrs["Implementation-Commit"]  = project.findProperty("gitCommit") ?: "unknown"
+        attrs["Implementation-Dirty"]   = "false"
+        attributes(attrs)
     }
 }
 

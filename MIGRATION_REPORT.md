@@ -121,7 +121,8 @@ Git history was not preserved in the monorepo (flat import of source tree).
 | `web-stubs` are manually maintained stub interfaces | `build-tools/web-stubs` | Low | Open — requires resolving xdat circular dep |
 | DicomEdit4/6 artifact coordinate change may break downstream consumers | `libs/dicom-edit4`, `libs/dicom-edit6` | Medium | Communication sent to known downstream maintainers |
 | Integration tests disabled in CI (require running XNAT instance) | `apps/web`, smoke-tests | Low | Tracked — smoke tests run against Docker Compose stack |
-| XNAT runtime fails to start on Java 21 — Spring ContextLoaderListener fails during initialization | `apps/web` | **High** | Open — SLF4J 1.7/2.0 provider mismatch and likely Spring 5.3/Hibernate 5.6 reflection issues with Java 21 strong encapsulation. WAR compiles but runtime initialization fails. Requires Spring/Hibernate version upgrades or additional `--add-opens` flags. |
+| XNAT runtime SLF4J/logback mismatch — fixed by forcing SLF4J 1.7.36 | `apps/web` | **Resolved** | Fixed — SLF4J 2.x was pulled in transitively; forced to 1.7.36 to match logback-classic 1.2.13 |
+| Missing Build-Date manifest attribute caused NullPointerException in XnatAppInfo — fixed | `apps/web` | **Resolved** | Fixed — added Build-Date and other XNAT-expected attributes to WAR manifest |
 | BouncyCastle cyclic inheritance causes StackOverflowError during Tomcat annotation scanning | `apps/web` | Medium | Mitigated — BouncyCastle JARs added to catalina.properties jarsToSkip |
 
 ---
@@ -144,8 +145,7 @@ Git history was not preserved in the monorepo (flat import of source tree).
 | Re-enable Checkstyle in `libs/xdat` and fix violations | `libs/xdat` | Medium | 2026-Q3 |
 | Preserve git history for each imported module (using `git filter-repo` or `git subtree`) | All | Low | 2026-Q4 |
 | Add Renovate / Dependabot for automated dependency updates | Root | Low | 2026-Q2 |
-| Resolve Java 21 runtime compatibility — upgrade SLF4J to 2.x, Spring to 6.x, Hibernate to 6.x, or add comprehensive `--add-opens` flags | `apps/web`, all libs | **High** | 2026-Q2 |
-| Investigate Spring ContextLoaderListener failure in Docker Compose — may need Tomcat context.xml adjustments | `deploy/docker-compose` | High | 2026-Q2 |
+| Upgrade SLF4J to 2.x + logback to 1.4+ (currently forced to SLF4J 1.7.36 for compatibility) | `apps/web`, all libs | Medium | 2026-Q3 |
 
 ---
 

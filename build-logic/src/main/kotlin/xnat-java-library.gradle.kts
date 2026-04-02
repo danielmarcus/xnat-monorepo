@@ -27,8 +27,10 @@ configurations.all {
     resolutionStrategy {
         // XNAT uses Reactor 2.x (reactor-bus, reactor-core 2.0.8.RELEASE).
         // Spring Framework 5.3.x pulls in Reactor 3.x which is API-incompatible.
-        // Force reactor-core to 2.x to preserve compatibility.
         force("io.projectreactor:reactor-core:2.0.8.RELEASE")
+        // XNAT uses logback-classic 1.2.x which requires SLF4J 1.7.x.
+        // Various transitive deps pull in SLF4J 2.x which is incompatible.
+        force("org.slf4j:slf4j-api:1.7.36")
     }
 }
 
