@@ -39,3 +39,19 @@ dependencies {
     compileOnly(libs.javax.servlet.api)
     compileOnly("com.google.code.findbugs:jsr305:3.0.2")
 }
+
+// Exclude facade classes from the JAR that have real implementations in apps/web.
+// These facades exist only for compile-time resolution in xnat-data-models.
+// At runtime, apps/web provides the real classes in WEB-INF/classes.
+tasks.named<Jar>("jar") {
+    exclude("org/nrg/xnat/utils/CatalogUtils.class")
+    exclude("org/nrg/xnat/utils/CatalogUtils\$*.class")
+    exclude("org/nrg/xnat/helpers/prearchive/PrearcUtils.class")
+    exclude("org/nrg/xnat/helpers/prearchive/PrearcUtils\$*.class")
+    exclude("org/nrg/xnat/turbine/utils/XNATUtils.class")
+    exclude("org/nrg/xnat/turbine/utils/XNATUtils\$*.class")
+    exclude("org/nrg/xnat/helpers/merge/ProjectAnonymizer.class")
+    exclude("org/nrg/xnat/helpers/merge/ProjectAnonymizer\$*.class")
+    exclude("org/nrg/xnat/restlet/resources/ScriptTriggerTemplateResource.class")
+    exclude("org/nrg/xnat/ajax/writer/JSONWriter.class")
+}

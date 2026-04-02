@@ -20,8 +20,9 @@ import org.nrg.xft.db.PoolDBUtils;
 import org.nrg.xft.event.EventMetaI;
 import org.nrg.xft.security.UserI;
 import org.nrg.xft.utils.XftStringUtils;
+import org.nrg.xdat.om.ArcArchivespecification;
 import org.nrg.xnat.exceptions.InvalidArchiveStructure;
-import org.nrg.xnat.turbine.utils.ArcSpecManager;
+import org.nrg.xnat.turbine.utils.ArcSpecBridge;
 
 import java.io.File;
 import java.io.Serial;
@@ -124,7 +125,7 @@ public abstract class BaseXnatImageassessordata extends AutoXnatImageassessordat
 			return;
 		}
 		final String                      projectId   = getProject();
-		final String                      rootPath    = ArcSpecManager.GetInstance().getArchivePathForProject(projectId);
+		final String                      rootPath    = ((ArcArchivespecification) ArcSpecBridge.getInstance()).getArchivePathForProject(projectId);
 		final File                        archivePath = getExpectedSessionDir().toPath().resolve("ASSESSORS").resolve(getArchiveDirectoryName()).toFile();
 		OmUtils.deleteResourceFiles(user, rootPath, projectId, archivePath, resources, event);
 	}

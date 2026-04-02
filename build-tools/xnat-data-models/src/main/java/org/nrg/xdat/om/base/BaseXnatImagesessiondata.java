@@ -52,7 +52,8 @@ import org.nrg.xnat.helpers.merge.ProjectAnonymizer;
 import org.nrg.xnat.helpers.scanType.ScanTypeMappingI;
 import org.nrg.xnat.scanAssessors.AssessorComparator;
 import org.nrg.xnat.scanAssessors.ScanAssessorI;
-import org.nrg.xnat.turbine.utils.ArcSpecManager;
+import org.nrg.xdat.om.ArcArchivespecification;
+import org.nrg.xnat.turbine.utils.ArcSpecBridge;
 import org.nrg.xnat.turbine.utils.CatalogSet;
 import org.nrg.xnat.utils.CatalogUtils;
 
@@ -2681,7 +2682,7 @@ public abstract class BaseXnatImagesessiondata extends AutoXnatImagesessiondata 
         }
 
         final String projectId   = getProject();
-        final String rootPath    = ArcSpecManager.GetInstance().getArchivePathForProject(projectId);
+        final String rootPath    = ((ArcArchivespecification) ArcSpecBridge.getInstance()).getArchivePathForProject(projectId);
         final File   archivePath = getSessionDir();
         OmUtils.deleteResourceFiles(user, rootPath, projectId, archivePath, resources, ci);
     }
@@ -2805,7 +2806,7 @@ public abstract class BaseXnatImagesessiondata extends AutoXnatImagesessiondata 
 		try {
 			//check if the user can modify data in this project
 			if(Permissions.canEdit(user, this.getItem().getXSIType()+"/project", this.getProject())){
-			ArcProject p=(ArcProject)ArcSpecManager.GetInstance().getProjectArc(this.getProject());
+			ArcProject p=(ArcProject)((ArcArchivespecification) ArcSpecBridge.getInstance()).getProjectArc(this.getProject());
 				if(p!=null){
 					//look for the matching pipeline in this project
 					ArcPipelinedataI pipe=p.getPipelineForDescendant(this.getItem().getXSIType(), pipelineStep);
@@ -2822,7 +2823,7 @@ public abstract class BaseXnatImagesessiondata extends AutoXnatImagesessiondata 
 				try {
 					//check if the user can modify data in this project
 					if(Permissions.canEdit(user, this.getItem().getXSIType()+"/project", this.getProject())){
-						ArcProject p=(ArcProject)ArcSpecManager.GetInstance().getProjectArc(share.getProject());
+						ArcProject p=(ArcProject)((ArcArchivespecification) ArcSpecBridge.getInstance()).getProjectArc(share.getProject());
 						if(p!=null){
 							//look for the matching pipeline in this project
 							ArcPipelinedataI pipe=p.getPipelineForDescendant(this.getItem().getXSIType(), pipelineStep);

@@ -61,7 +61,8 @@ import org.nrg.xft.utils.XftStringUtils;
 import org.nrg.xnat.archive.CurrentArcIdentifier;
 import org.nrg.xnat.archive.CurrentArcIdentifierI;
 import org.nrg.xnat.exceptions.InvalidArchiveStructure;
-import org.nrg.xnat.turbine.utils.ArcSpecManager;
+import org.nrg.xdat.om.ArcArchivespecification;
+import org.nrg.xnat.turbine.utils.ArcSpecBridge;
 import org.nrg.xnat.turbine.utils.ArchivableItem;
 import org.nrg.xnat.utils.WorkflowUtils;
 import org.restlet.data.Status;
@@ -633,7 +634,7 @@ public class BaseXnatExperimentdata extends AutoXnatExperimentdata implements Ar
      */
     @Nullable
     public File getSessionDir() {
-        final String projectArchivePath = ArcSpecManager.GetInstance().getArchivePathForProject(this.getProject());
+        final String projectArchivePath = ((ArcArchivespecification) ArcSpecBridge.getInstance()).getArchivePathForProject(this.getProject());
         if (projectArchivePath == null) {
             return null;
         }
@@ -662,7 +663,7 @@ public class BaseXnatExperimentdata extends AutoXnatExperimentdata implements Ar
             return;
         }
         final String projectId = getProject();
-        final String rootPath  = ArcSpecManager.GetInstance().getArchivePathForProject(projectId);
+        final String rootPath  = ((ArcArchivespecification) ArcSpecBridge.getInstance()).getArchivePathForProject(projectId);
         OmUtils.deleteResourceFiles(user, rootPath, projectId, getSessionDir(), resources, ci);
     }
 

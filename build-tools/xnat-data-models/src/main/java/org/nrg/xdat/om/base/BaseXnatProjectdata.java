@@ -63,9 +63,10 @@ import org.nrg.xft.utils.FileUtils;
 import org.nrg.xft.utils.SaveItemHelper;
 import org.nrg.xft.utils.ValidationUtils.ValidationResults;
 import org.nrg.xft.utils.XftStringUtils;
+import org.nrg.xdat.om.ArcArchivespecification;
 import org.nrg.xnat.exceptions.InvalidArchiveStructure;
 import org.nrg.xnat.helpers.prearchive.PrearcUtils;
-import org.nrg.xnat.turbine.utils.ArcSpecManager;
+import org.nrg.xnat.turbine.utils.ArcSpecBridge;
 import org.nrg.xnat.turbine.utils.ArchivableItem;
 import org.nrg.xnat.utils.WorkflowUtils;
 import org.restlet.data.Status;
@@ -338,7 +339,7 @@ public class BaseXnatProjectdata extends AutoXnatProjectdata implements Archivab
         }
 
         if (path == null) {
-            path = Path.of(ArcSpecManager.GetInstance().getGlobalArchivePath(), getId()).toString();
+            path = Path.of(((ArcArchivespecification) ArcSpecBridge.getInstance()).getGlobalArchivePath(), getId()).toString();
         }
 
         path = path.replace('\\', '/');
@@ -361,7 +362,7 @@ public class BaseXnatProjectdata extends AutoXnatProjectdata implements Archivab
         }
 
         if (path == null) {
-            path = ArcSpecManager.GetInstance().getGlobalCachePath() + "/" + getId();
+            path = ((ArcArchivespecification) ArcSpecBridge.getInstance()).getGlobalCachePath() + "/" + getId();
         }
 
         path = path.replace('\\', '/');
@@ -384,7 +385,7 @@ public class BaseXnatProjectdata extends AutoXnatProjectdata implements Archivab
         }
 
         if (path == null) {
-            path = ArcSpecManager.GetInstance().getGlobalPrearchivePath() + "/" + getId();
+            path = ((ArcArchivespecification) ArcSpecBridge.getInstance()).getGlobalPrearchivePath() + "/" + getId();
         }
 
         path = path.replace('\\', '/');
@@ -407,7 +408,7 @@ public class BaseXnatProjectdata extends AutoXnatProjectdata implements Archivab
         }
 
         if (path == null) {
-            path = ArcSpecManager.GetInstance().getGlobalBuildPath() + "/" + getId();
+            path = ((ArcArchivespecification) ArcSpecBridge.getInstance()).getGlobalBuildPath() + "/" + getId();
         }
 
         path = path.replace('\\', '/');
@@ -770,7 +771,7 @@ public class BaseXnatProjectdata extends AutoXnatProjectdata implements Archivab
     }
 
     public ArcProject getArcSpecification() {
-        return (ArcProject)ArcSpecManager.GetInstance().getProjectArc(getId());
+        return (ArcProject)((ArcArchivespecification) ArcSpecBridge.getInstance()).getProjectArc(getId());
     }
 
     public static Comparator GetComparator() {
@@ -1213,7 +1214,7 @@ public class BaseXnatProjectdata extends AutoXnatProjectdata implements Archivab
 
     @SuppressWarnings("unused")
     public boolean isAutoArchive() {
-        Integer i = ArcSpecManager.GetInstance().getAutoQuarantineCodeForProject(getId());
+        Integer i = ((ArcArchivespecification) ArcSpecBridge.getInstance()).getAutoQuarantineCodeForProject(getId());
         return !(i == null || i < 4);
     }
 
@@ -1682,16 +1683,17 @@ public class BaseXnatProjectdata extends AutoXnatProjectdata implements Archivab
 
     protected void initArcProjectImpl(final @Nullable ArcProject arcProject, final UserI user, final EventMetaI eventMeta) throws Exception {
         final ArcProject working = getDefaultArcProject(user, arcProject);
-        working.setProperty("projects_project_arc_archivespe_arc_archivespecification_id", ArcSpecManager.GetInstance().getArcArchivespecificationId());
+        final ArcArchivespecification arcSpec = (ArcArchivespecification) ArcSpecBridge.getInstance();
+        working.setProperty("projects_project_arc_archivespe_arc_archivespecification_id", arcSpec.getArcArchivespecificationId());
         working.setId(getId());
-        working.setProperty("arc:project/paths/archivePath", ArcSpecManager.GetInstance().getGlobalArchivePath() + getId() + "/");
-        working.setProperty("arc:project/paths/prearchivePath", ArcSpecManager.GetInstance().getGlobalPrearchivePath() + getId() + "/");
-        working.setProperty("arc:project/paths/cachePath", ArcSpecManager.GetInstance().getGlobalCachePath() + getId() + "/");
-        working.setProperty("arc:project/paths/buildPath", ArcSpecManager.GetInstance().getGlobalBuildPath() + getId() + "/");
+        working.setProperty("arc:project/paths/archivePath", arcSpec.getGlobalArchivePath() + getId() + "/");
+        working.setProperty("arc:project/paths/prearchivePath", arcSpec.getGlobalPrearchivePath() + getId() + "/");
+        working.setProperty("arc:project/paths/cachePath", arcSpec.getGlobalCachePath() + getId() + "/");
+        working.setProperty("arc:project/paths/buildPath", arcSpec.getGlobalBuildPath() + getId() + "/");
         working.setPrearchiveCode(XDAT.getIntSiteConfigurationProperty("defaultPrearchiveCode", 4));
 
         SaveItemHelper.authorizedSave(working, user, true, false, eventMeta);
-        ArcSpecManager.Reset();
+        ArcSpecBridge.reset();
     }
 
     private ArcProject getDefaultArcProject(final UserI user, final @Nullable ArcProject existing) throws XFTInitException, ElementNotFoundException {
