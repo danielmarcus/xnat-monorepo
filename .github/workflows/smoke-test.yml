@@ -93,8 +93,7 @@ jobs:
           docker compose \
             -f docker-compose.yml \
             -f docker-compose.ci.yml \
-            up --detach --wait \
-            --wait-timeout 120
+            up --detach
 
       # -----------------------------------------------------------------------
       # 5. Wait for XNAT to finish initialising
@@ -102,14 +101,15 @@ jobs:
       #    exits 0 once XNAT returns HTTP 200, or exits 1 after a timeout.
       # -----------------------------------------------------------------------
       - name: Wait for XNAT initialization
+        timeout-minutes: 10
         run: |
-          if [[ -f smoke-tests/wait-for-xnat.sh ]]; then
-            bash smoke-tests/wait-for-xnat.sh
+          if [[ -f deploy/docker-compose/wait-for-xnat.sh ]]; then
+            bash deploy/docker-compose/wait-for-xnat.sh -t 600
           else
-            # Fallback inline poller (180 s, 5 s interval)
+            # Fallback inline poller (600 s, 10 s interval)
             XNAT_URL="${XNAT_URL:-http://localhost:80}"
-            MAX_WAIT=180
-            INTERVAL=5
+            MAX_WAIT=600
+            INTERVAL=10
             elapsed=0
             echo "Polling ${XNAT_URL} for XNAT readiness..."
             until curl --silent --fail --output /dev/null "${XNAT_URL}/xnat/app/template/Login.vm"; do
