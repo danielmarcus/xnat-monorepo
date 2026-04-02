@@ -1,0 +1,9 @@
+*.iml
+*.log
+.classpath
+.idea
+.project
+.settings/org.eclipse.jdt.core.prefs
+/.settings
+dep*.txt
+target

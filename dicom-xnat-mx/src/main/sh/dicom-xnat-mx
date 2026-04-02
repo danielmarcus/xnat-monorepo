@@ -1,0 +1,39 @@
+#!/bin/sh
+# Run the DICOM metadata to XNAT session XML metadata translator
+#
+# dicom-xnat-mx: dicom-xnat-mx
+# XNAT http://www.xnat.org
+# Copyright (c) 2017, Washington University School of Medicine
+# All Rights Reserved
+#
+# Released under the Simplified BSD.
+#
+IFS=
+
+######################
+# Configuration items
+######################
+
+COMMAND_PATH=`which $0`
+
+# Root directory of this package
+BASEDIR=${BASEDIR:-`dirname $COMMAND_PATH`/..}
+
+# Path of "lib" directory, where jars can be found
+LIBDIR=${LIBDIR:-${BASEDIR}/lib}
+
+# Use UNIX-style classpath separator unless this is Cygwin
+if [ $JAVA_HOME ] ; then
+    JAVA=${JAVA:-${JAVA_HOME}/bin/java}
+else
+    JAVA=${JAVA:-java}
+fi
+
+CLASSPATH="`echo ${LIBDIR}/*.jar | tr ' ' :`:${CLASSDIR}:${BASEDIR}/config"
+
+case "`uname`" in
+	CYGWIN*) CLASSPATH="`cygpath -wp $CLASSPATH`"
+esac
+export CLASSPATH
+
+"$JAVA" $JAVA_OPTS org.nrg.dcm.xnat.DICOMSessionBuilder $*
