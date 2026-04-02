@@ -27,8 +27,6 @@ plugins {
     id "idea"
     id "eclipse"
     id "com.gradle.plugin-publish" version "1.3.0"
-    id "io.spring.dependency-management" version "1.0.11.RELEASE"
-    id "net.linguica.maven-settings" version "0.5"
 }
 
 group "org.nrg.xdat.build"
@@ -87,36 +85,25 @@ configurations {
     all*.exclude group: "fulcrum"
 }
 
-dependencyManagement {
-    imports {
-        mavenBom "org.nrg:parent:${vXnat}"
-    }
-    generatedPomCustomization {
-        enabled = false
-    }
-}
-
-def vXdatCore = dependencyManagement.importedProperties["xdat.version"]
-def vConfig = dependencyManagement.importedProperties["nrg.config.version"]
-def vFramework = dependencyManagement.importedProperties["nrg.framework.version"]
-def vNotify = dependencyManagement.importedProperties["nrg.notify.version"]
-def vPrefs = dependencyManagement.importedProperties["nrg.prefs.version"]
-def vSpring = dependencyManagement.importedProperties["spring-framework.version"]
-def vSpringSecurity = dependencyManagement.importedProperties["spring-security.version"]
-def vJackson = dependencyManagement.importedProperties["jackson.version"]
-def vCommonsLang3 = dependencyManagement.importedProperties["commons-lang3.version"]
-def vCommonsCollections = dependencyManagement.importedProperties["commons-collections.version"]
-def vCommonsIo = dependencyManagement.importedProperties["commons-io.version"]
-def vGuava = dependencyManagement.importedProperties["guava.version"]
-def vJunit = dependencyManagement.importedProperties["junit.version"]
+def vXdatCore = "1.10.0-RC2-SNAPSHOT"
+def vConfig = "1.10.0-RC2-SNAPSHOT"
+def vFramework = "1.10.0-RC2-SNAPSHOT"
+def vNotify = "1.10.0-RC2-SNAPSHOT"
+def vPrefs = "1.10.0-RC2-SNAPSHOT"
+def vSpring = "5.3.39"
+def vSpringSecurity = "5.7.13"
+def vJackson = "2.13.5"
+def vCommonsLang3 = "3.11"
+def vCommonsCollections = "3.2.2"
+def vCommonsIo = "2.15.1"
+def vGuava = "32.1.3-jre"
+def vJunit = "4.13.2"
 
 
 
 // Note: we have to include dependency versions here because the Gradle plugin mechanism doesn't work
 // with dependency management, resulting in error messages about not being able to find the version.
 dependencies {
-    implementation platform("org.nrg:parent:${vXnat}")
-
     implementation("org.nrg.xdat:core:${vXdatCore}") {
         transitive = false
     }
@@ -148,7 +135,7 @@ dependencies {
 }
 
 jacoco {
-    toolVersion = dependencyManagement.importedProperties["jacoco.version"]
+    toolVersion = "0.8.8"
 }
 
 jacocoTestReport {
