@@ -25,14 +25,12 @@ services:
   xnat-web:
     container_name: xnat-web-ci
     environment:
-      # Disable features that slow first-boot in CI
-      XNAT_SITE_URL: ${XNAT_SITE_URL:-http://localhost}
       CATALINA_OPTS: >-
         -Xms256m
         -Xmx1g
         -Dxnat.home=/data/xnat/home
         -Dxnat.config=/data/xnat/home/config/xnat-conf.properties
-    # No persistent archive/build/cache in CI
+    # In CI the WAR is staged by the build step; no persistent volumes
     volumes:
       - ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war:/usr/local/tomcat/webapps/ROOT.war:ro
       - ./xnat-conf/xnat-conf.properties:/data/xnat/home/config/xnat-conf.properties:ro

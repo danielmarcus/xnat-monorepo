@@ -23,48 +23,37 @@ services:
       start_period: 20s
 
   xnat-web:
-    image: tomcat:9.0-jdk21-temurin
+    build:
+      context: ./xnat
+      args:
+        XNAT_ROOT: /data/xnat
+        XNAT_HOME: /data/xnat/home
+        XNAT_DATASOURCE_DRIVER: org.postgresql.Driver
+        XNAT_DATASOURCE_URL: jdbc:postgresql://xnat-db:5432/xnat
+        XNAT_DATASOURCE_USERNAME: xnat
+        XNAT_DATASOURCE_PASSWORD: xnat
+        XNAT_EMAIL: ${XNAT_ADMIN_EMAIL:-admin@example.com}
+        TOMCAT_XNAT_FOLDER: ROOT
     container_name: xnat-web
     restart: unless-stopped
     depends_on:
       xnat-db:
         condition: service_healthy
-    # Remove default Tomcat webapps and create XNAT dirs before starting
-    command: >
-      bash -c "
-        rm -rf /usr/local/tomcat/webapps/ROOT /usr/local/tomcat/webapps/docs /usr/local/tomcat/webapps/examples /usr/local/tomcat/webapps/host-manager /usr/local/tomcat/webapps/manager &&
-        mkdir -p /data/xnat/home/config /data/xnat/home/logs /data/xnat/home/plugins /data/xnat/archive /data/xnat/build /data/xnat/cache /data/xnat/prearchive &&
-        catalina.sh run
-      "
     ports:
       - "${XNAT_PORT:-80}:8080"
     environment:
-      # Database connection
-      XNAT_DATASOURCE_URL: jdbc:postgresql://xnat-db:5432/xnat
-      XNAT_DATASOURCE_DRIVER: org.postgresql.Driver
-      XNAT_DATASOURCE_USERNAME: xnat
-      XNAT_DATASOURCE_PASSWORD: xnat
-
-      # Site settings
-      XNAT_SITE_URL: ${XNAT_SITE_URL:-http://localhost}
       XNAT_HOME: /data/xnat/home
-
-      # Admin credentials (used only on first-run initialisation)
-      XNAT_ADMIN_USERNAME: ${XNAT_ADMIN_USER:-admin}
-      XNAT_ADMIN_PASSWORD: ${XNAT_ADMIN_PASS:-admin}
-      XNAT_ADMIN_EMAIL: ${XNAT_ADMIN_EMAIL:-admin@example.com}
-
-      # JVM tuning
+      XNAT_DATASOURCE_USERNAME: xnat
+      PGPASSWORD: xnat
       CATALINA_OPTS: >-
         -Xms512m
         -Xmx2g
         -Dxnat.home=/data/xnat/home
         -Dxnat.config=/data/xnat/home/config/xnat-conf.properties
-
     volumes:
-      # Replace the bundled webapp with the locally built WAR
+      # Deploy the locally built WAR as ROOT.war
       - ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war:/usr/local/tomcat/webapps/ROOT.war:ro
-      # XNAT configuration
+      # XNAT configuration (overrides the build-time generated config)
       - ./xnat-conf/xnat-conf.properties:/data/xnat/home/config/xnat-conf.properties:ro
       # Persistent archive storage
       - xnat-archive:/data/xnat/archive
