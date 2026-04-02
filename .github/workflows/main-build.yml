@@ -66,10 +66,10 @@ jobs:
           cache-read-only: false
 
       # -----------------------------------------------------------------------
-      # 4. Build — compile + test + WAR assembly
+      # 4. Build — compile + WAR assembly (tests run separately in PR validation)
       # -----------------------------------------------------------------------
       - name: Build and package WAR
-        run: ./gradlew build --no-daemon --continue
+        run: ./gradlew assemble :apps:web:war --no-daemon
         env:
           GRADLE_OPTS: "-Xmx2g -XX:+HeapDumpOnOutOfMemoryError"
 
