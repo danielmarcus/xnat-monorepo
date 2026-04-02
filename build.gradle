@@ -1,0 +1,212 @@
+/*
+ * spawner: build
+ * XNAT https://www.xnat.org
+ * Copyright (c) 2020, Washington University School of Medicine
+ * All Rights Reserved
+ *
+ * Released under the Simplified BSD.
+ */
+
+plugins {
+    id "groovy"
+    id "java"
+    id "jacoco"
+    id "maven-publish"
+    id "idea"
+    id "eclipse"
+    id "com.dorongold.task-tree" version "1.5"
+    id "com.palantir.git-version" version "0.12.1"
+    id "io.franzbecker.gradle-lombok" version "5.0.0"
+    id "io.spring.dependency-management" version "1.0.11.RELEASE"
+    id "net.linguica.maven-settings" version "0.5"
+}
+
+group "org.nrg.xnat"
+version "1.10.0-RC2-SNAPSHOT"
+description "XNAT Spawner Service"
+
+repositories {
+    mavenLocal()
+    maven { url "https://nrgxnat.jfrog.io/nrgxnat/libs-release" }
+    maven { url "https://nrgxnat.jfrog.io/nrgxnat/libs-snapshot" }
+    mavenCentral()
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.nrg:parent:${project.version}"
+    }
+    generatedPomCustomization {
+        enabled = false
+    }
+}
+
+dependencies {
+    implementation platform("org.nrg:parent:${project.version}")
+    implementation("org.nrg.xdat:core") {
+        transitive = false
+    }
+
+    implementation("org.nrg:framework") {
+        transitive = false
+    }
+
+    implementation("org.nrg:config") {
+        exclude group: "xml-apis", module: "xml-apis"
+    }
+
+    implementation "org.springframework:spring-webmvc"
+    implementation "org.springframework.security:spring-security-core"
+    implementation "io.springfox:springfox-swagger2"
+    implementation "io.springfox:springfox-swagger-ui"
+    implementation "com.fasterxml.jackson.core:jackson-databind"
+    implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml"
+    implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-xml"
+    implementation "org.postgresql:postgresql"
+    implementation "org.codehaus.groovy:groovy-all"
+    implementation "javax.servlet:javax.servlet-api"
+
+    testImplementation "org.nrg:test"
+    testImplementation "junit:junit"
+    testImplementation "org.springframework:spring-test"
+    testImplementation "org.assertj:assertj-core"
+    testImplementation "org.hamcrest:hamcrest-library"
+    testImplementation "com.h2database:h2"
+}
+
+jacoco {
+    toolVersion = dependencyManagement.importedProperties["jacoco.version"] as String
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = false
+        csv.required = false
+        html.required = true
+    }
+}
+
+lombok {
+    version = dependencyManagement.importedProperties["lombok.version"] as String
+    sha256 = dependencyManagement.importedProperties["lombok.checksum"] as String
+}
+
+// Pulls in the Jenkins BUILD_NUMBER environment variable if available.
+def buildDate = new Date()
+def buildNumber = System.getenv().BUILD_NUMBER?.toInteger() ?: "Manual"
+def isDirty, branchName, gitHash, gitHashFull, commitDistance, lastTag, isCleanTag
+
+try {
+    def gitDetails = versionDetails()
+    isDirty = gitVersion().endsWith ".dirty"
+    branchName = gitDetails.branchName ?: "Unknown"
+    gitHash = gitDetails.gitHash
+    gitHashFull = gitDetails.gitHashFull
+    commitDistance = gitDetails.commitDistance
+    lastTag = gitDetails.lastTag
+    isCleanTag = gitDetails.isCleanTag
+} catch (IllegalArgumentException ignored) {
+    logger.info "Got an error trying to read VCS metadata from git. It's possible this project is not under VCS control. Using placeholder values for manifest entries."
+    isDirty = true
+    branchName = "Unknown"
+    gitHash = "None"
+    gitHashFull = "None"
+    commitDistance = 0
+    lastTag = "None"
+    isCleanTag = false
+}
+
+ext.gitManifest = manifest {
+    attributes "Application-Name": project.description,
+            "Build-Date": buildDate,
+            "Build-Number": buildNumber,
+            "Implementation-Version": project.version,
+            "Implementation-Sha": gitHash,
+            "Implementation-Sha-Full": gitHashFull,
+            "Implementation-Commit": commitDistance,
+            "Implementation-LastTag": lastTag,
+            "Implementation-Branch": branchName,
+            "Implementation-CleanTag": isCleanTag,
+            "Implementation-Dirty": isDirty
+}
+
+logger.info """
+Building artifacts with manifest attributes:
+
+ * Build-Date:              ${buildDate}
+ * Build-Number:            ${buildNumber}
+ * Implementation-Version:  ${version}
+ * Implementation-Sha-Full: ${gitHashFull}
+ * Implementation-Sha:      ${gitHash}
+ * Implementation-Commit:   ${commitDistance}
+ * Implementation-LastTag:  ${lastTag}
+ * Implementation-Branch:   ${branchName}
+ * Implementation-CleanTag: ${isCleanTag}
+ * Implementation-Dirty:    ${isDirty}
+"""
+
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    withJavadocJar()
+    withSourcesJar()
+}
+
+jar {
+    dependsOn test
+    enabled = true
+    manifest {
+        from gitManifest
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+    
+            pom.withXml {
+                def root = asNode()
+                root.appendNode("name", "XNAT Spawner API")
+                root.appendNode("description", project.description)
+                root.appendNode("url", "https://bitbucket.org/xnatdev/spawner")
+                root.appendNode("inceptionYear", "2018")
+    
+                def scm = root.appendNode("scm")
+                scm.appendNode("url", "https://bitbucket.org/xnatdev/spawner")
+                scm.appendNode("connection", "scm:https://bitbucket.org/xnatdev/spawner.git")
+                scm.appendNode("developerConnection", "scm:git://bitbucket.org/xnatdev/spawner.git")
+    
+                def license = root.appendNode("licenses").appendNode("license")
+                license.appendNode("name", "Simplified BSD 2-Clause License")
+                license.appendNode("url", "https://xnat.org/about/license.php")
+                license.appendNode("distribution", "repo")
+    
+                def developers = root.appendNode("developers")
+                def rherrick = developers.appendNode("developer")
+                rherrick.appendNode("id", "rherrick")
+                rherrick.appendNode("name", "Rick Herrick")
+                rherrick.appendNode("email", "jrherrick@wustl.edu")
+		def mohana = developers.appendNode("developer")
+		mohana.appendNode("id", "mohana")
+		mohana.appendNode("name","Mohana Ramaratnam")
+		mohana.appendNode("email", "mohana@xnatworks.io")
+
+            }
+        }
+    }
+    
+    repositories {
+        maven {
+            url "https://nrgxnat.jfrog.io/nrgxnat/libs-${project.version.endsWith("-SNAPSHOT") ? "snapshot" : "release"}-local"
+            // The value for name must match <id> in ~/.m2/settings.xml
+            name = "XNAT_Artifactory"
+        }
+    }
+}
+
+String propertyWithDefault(String name, Object value) {
+    hasProperty(name) ? property(name) : value
+}

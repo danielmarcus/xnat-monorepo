@@ -1,0 +1,15 @@
+*.iml
+*.log
+.classpath
+.project
+.settings/
+/.gradle*
+/.idea
+/build
+/ide-bin/
+/lib/
+/out
+/target
+MANIFEST.MF
+dep*.txt
+gradle.properties
