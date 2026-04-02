@@ -1,0 +1,95 @@
+version: "3.8"
+
+# XNAT Docker Compose deployment stack
+# WAR file is built at: apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war
+# and mounted into Tomcat as ROOT.war.
+
+services:
+  xnat-db:
+    image: postgres:15-alpine
+    container_name: xnat-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: xnat
+      POSTGRES_USER: xnat
+      POSTGRES_PASSWORD: xnat
+    volumes:
+      - xnat-db-data:/var/lib/postgresql/data
+    networks:
+      - xnat-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xnat -d xnat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  xnat-web:
+    image: xnat/xnat-web:latest
+    container_name: xnat-web
+    restart: unless-stopped
+    depends_on:
+      xnat-db:
+        condition: service_healthy
+    ports:
+      - "${XNAT_PORT:-80}:8080"
+    environment:
+      # Database connection
+      XNAT_DATASOURCE_URL: jdbc:postgresql://xnat-db:5432/xnat
+      XNAT_DATASOURCE_DRIVER: org.postgresql.Driver
+      XNAT_DATASOURCE_USERNAME: xnat
+      XNAT_DATASOURCE_PASSWORD: xnat
+
+      # Site settings
+      XNAT_SITE_URL: ${XNAT_SITE_URL:-http://localhost}
+      XNAT_HOME: /data/xnat/home
+
+      # Admin credentials (used only on first-run initialisation)
+      XNAT_ADMIN_USERNAME: ${XNAT_ADMIN_USER:-admin}
+      XNAT_ADMIN_PASSWORD: ${XNAT_ADMIN_PASS:-admin}
+      XNAT_ADMIN_EMAIL: ${XNAT_ADMIN_EMAIL:-admin@example.com}
+
+      # JVM tuning
+      CATALINA_OPTS: >-
+        -Xms512m
+        -Xmx2g
+        -Dxnat.home=/data/xnat/home
+        -Dxnat.config=/data/xnat/home/config/xnat-conf.properties
+
+    volumes:
+      # Replace the bundled webapp with the locally built WAR
+      - ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war:/usr/local/tomcat/webapps/ROOT.war:ro
+      # XNAT configuration
+      - ./xnat-conf/xnat-conf.properties:/data/xnat/home/config/xnat-conf.properties:ro
+      # Persistent archive storage
+      - xnat-archive:/data/xnat/archive
+      # Build / cache dirs
+      - xnat-build:/data/xnat/build
+      - xnat-cache:/data/xnat/cache
+    networks:
+      - xnat-network
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >
+          wget --quiet --spider --server-response
+          http://localhost:8080/xapi/siteConfig 2>&1
+          | grep -q '200 OK'
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+networks:
+  xnat-network:
+    driver: bridge
+
+volumes:
+  xnat-db-data:
+    driver: local
+  xnat-archive:
+    driver: local
+  xnat-build:
+    driver: local
+  xnat-cache:
+    driver: local

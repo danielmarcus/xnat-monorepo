@@ -1,0 +1,101 @@
+# PR Validation Workflow
+#
+# Triggers on every pull request targeting main.
+# Compiles the project and runs unit/integration tests so that broken
+# code is caught before it reaches the default branch.
+#
+# Required secrets: none (build cache uses the built-in GITHUB_TOKEN)
+# See CI_SECRETS.md for the full secrets reference.
+
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+# Cancel any in-progress run for the same PR when a new commit is pushed.
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write        # allows the test reporter to annotate the PR
+  pull-requests: write # allows the test reporter to post a summary comment
+
+jobs:
+  validate:
+    name: Compile & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Source checkout
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so Gradle's up-to-date checks work
+
+      # -----------------------------------------------------------------------
+      # 2. Java 21 (Temurin) setup
+      # -----------------------------------------------------------------------
+      - name: Set up Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # -----------------------------------------------------------------------
+      # 3. Gradle — wrapper validation + build-cache setup
+      #    gradle/actions/setup-gradle handles:
+      #      - wrapper validation (security)
+      #      - ~/.gradle caching between runs
+      #      - build-scan publication (optional)
+      # -----------------------------------------------------------------------
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # Cache the Gradle home directory between workflow runs.
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      # -----------------------------------------------------------------------
+      # 4. Compile (fast feedback — fail early if source doesn't compile)
+      # -----------------------------------------------------------------------
+      - name: Compile
+        run: ./gradlew classes testClasses --no-daemon --continue
+        env:
+          # Give the JVM more heap on the GitHub-hosted runner.
+          GRADLE_OPTS: "-Xmx2g -XX:+HeapDumpOnOutOfMemoryError"
+
+      # -----------------------------------------------------------------------
+      # 5. Run tests
+      # -----------------------------------------------------------------------
+      - name: Run tests
+        run: ./gradlew test --no-daemon --continue
+        env:
+          GRADLE_OPTS: "-Xmx2g -XX:+HeapDumpOnOutOfMemoryError"
+
+      # -----------------------------------------------------------------------
+      # 6. Publish test results as check annotations on the PR
+      # -----------------------------------------------------------------------
+      - name: Publish test results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: '**/build/test-results/test/*.xml'
+          comment_title: 'Test Results'
+          check_name: 'Unit Test Results'
+
+      # -----------------------------------------------------------------------
+      # 7. Upload test reports for manual inspection on failure
+      # -----------------------------------------------------------------------
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-pr-${{ github.event.pull_request.number }}
+          path: '**/build/reports/tests/'
+          retention-days: 7

@@ -1,0 +1,217 @@
+# Smoke Test Workflow
+#
+# Triggered automatically after a successful main-build run.
+# Downloads the WAR artifact produced by main-build, mounts it into a
+# Docker Compose stack, waits for XNAT to become ready, then runs the
+# Python/pytest smoke-test suite.
+#
+# On failure the job captures all container logs and uploads them alongside
+# the pytest JUnit XML report so failures can be diagnosed without re-running.
+#
+# Required secrets: none beyond GITHUB_TOKEN (used internally by actions).
+# Optional secrets:
+#   SLACK_WEBHOOK_URL — post a Slack notification on failure
+#
+# See CI_SECRETS.md for the full secrets reference.
+
+name: Smoke Tests
+
+on:
+  workflow_run:
+    workflows:
+      - "Main Build"
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read    # download artifacts from the triggering workflow run
+  checks: write    # publish JUnit XML results as check annotations
+
+jobs:
+  smoke-test:
+    name: Docker Compose Smoke Tests
+    # Only run when the upstream build succeeded.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout (needed for docker-compose files and smoke-test sources)
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Check out the same SHA that main-build ran against.
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # -----------------------------------------------------------------------
+      # 2. Download build-info to resolve the correct WAR artifact name
+      # -----------------------------------------------------------------------
+      - name: Download build-info artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-info
+          path: /tmp/build-info
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load build-info into environment
+        run: |
+          # Source the env file — values are safe (written by our own workflow).
+          while IFS='=' read -r key value; do
+            [[ -z "$key" || "$key" == \#* ]] && continue
+            key="$(echo "$key" | xargs)"
+            value="$(echo "$value" | xargs)"
+            echo "${key}=${value}" >> "$GITHUB_ENV"
+          done < /tmp/build-info/build-info.env
+
+      # -----------------------------------------------------------------------
+      # 3. Download the WAR artifact produced by main-build
+      # -----------------------------------------------------------------------
+      - name: Download WAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.WAR_ARTIFACT_NAME }}
+          path: /tmp/war
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Place the WAR where Docker Compose expects it.
+      - name: Stage WAR for Docker Compose
+        run: |
+          mkdir -p apps/web/build/libs
+          cp /tmp/war/web-1.10.0-RC2-SNAPSHOT.war apps/web/build/libs/
+
+      # -----------------------------------------------------------------------
+      # 4. Start the Docker Compose stack (base + CI override)
+      # -----------------------------------------------------------------------
+      - name: Start Docker Compose stack
+        working-directory: deploy/docker-compose
+        run: |
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.ci.yml \
+            up --detach --wait \
+            --wait-timeout 120
+
+      # -----------------------------------------------------------------------
+      # 5. Wait for XNAT to finish initialising
+      #    The script polls the /xnat/app/template/Login.vm endpoint and
+      #    exits 0 once XNAT returns HTTP 200, or exits 1 after a timeout.
+      # -----------------------------------------------------------------------
+      - name: Wait for XNAT initialization
+        run: |
+          if [[ -f smoke-tests/wait-for-xnat.sh ]]; then
+            bash smoke-tests/wait-for-xnat.sh
+          else
+            # Fallback inline poller (180 s, 5 s interval)
+            XNAT_URL="${XNAT_URL:-http://localhost:80}"
+            MAX_WAIT=180
+            INTERVAL=5
+            elapsed=0
+            echo "Polling ${XNAT_URL} for XNAT readiness..."
+            until curl --silent --fail --output /dev/null "${XNAT_URL}/xnat/app/template/Login.vm"; do
+              if (( elapsed >= MAX_WAIT )); then
+                echo "::error::XNAT did not become ready within ${MAX_WAIT}s."
+                exit 1
+              fi
+              echo "  waiting... (${elapsed}s elapsed)"
+              sleep $INTERVAL
+              (( elapsed += INTERVAL ))
+            done
+            echo "XNAT is ready after ${elapsed}s."
+          fi
+        env:
+          XNAT_URL: http://localhost:80
+
+      # -----------------------------------------------------------------------
+      # 6. Python + pytest setup
+      # -----------------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install smoke-test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install from requirements file if present, otherwise install
+          # the minimum required packages directly.
+          if [[ -f smoke-tests/requirements.txt ]]; then
+            pip install -r smoke-tests/requirements.txt
+          else
+            pip install pytest requests pytest-html
+          fi
+
+      # -----------------------------------------------------------------------
+      # 7. Run smoke tests
+      # -----------------------------------------------------------------------
+      - name: Run smoke tests
+        run: |
+          pytest smoke-tests/ \
+            --junitxml=smoke-test-results.xml \
+            --html=smoke-test-report.html \
+            --self-contained-html \
+            -v
+        env:
+          XNAT_BASE_URL: http://localhost:80
+          XNAT_USER: admin
+          XNAT_PASS: admin
+
+      # -----------------------------------------------------------------------
+      # 8. Publish JUnit XML results as check annotations
+      # -----------------------------------------------------------------------
+      - name: Publish smoke-test results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: smoke-test-results.xml
+          check_name: 'Smoke Test Results'
+          comment_title: 'Smoke Test Results'
+
+      # -----------------------------------------------------------------------
+      # 9. On failure: capture container logs + upload diagnostics
+      # -----------------------------------------------------------------------
+      - name: Capture container logs
+        if: failure()
+        working-directory: deploy/docker-compose
+        run: |
+          mkdir -p /tmp/container-logs
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.ci.yml \
+            logs --no-color --timestamps \
+            > /tmp/container-logs/docker-compose.log 2>&1 || true
+
+      - name: Upload container logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-logs-${{ env.GIT_SHA_SHORT }}
+          path: /tmp/container-logs/
+          retention-days: 7
+
+      - name: Upload smoke-test HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-report-${{ env.GIT_SHA_SHORT }}
+          path: |
+            smoke-test-results.xml
+            smoke-test-report.html
+          retention-days: 7
+
+      # -----------------------------------------------------------------------
+      # 10. Tear down the stack (always runs to avoid leaving containers up)
+      # -----------------------------------------------------------------------
+      - name: Tear down Docker Compose stack
+        if: always()
+        working-directory: deploy/docker-compose
+        run: |
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.ci.yml \
+            down --volumes --remove-orphans || true

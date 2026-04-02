@@ -1,0 +1,58 @@
+version: "3.8"
+
+# CI override for docker-compose.yml
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
+#
+# Changes from the base file:
+#   - No persistent volumes (all storage is ephemeral per-run)
+#   - Shorter healthcheck intervals for faster feedback
+#   - Fixed, deterministic container names
+
+services:
+  xnat-db:
+    container_name: xnat-db-ci
+    # Faster readiness checks in CI
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xnat -d xnat"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    # No persistent volume in CI — use a tmpfs-backed anonymous volume
+    volumes:
+      - type: tmpfs
+        target: /var/lib/postgresql/data
+
+  xnat-web:
+    container_name: xnat-web-ci
+    environment:
+      # Disable features that slow first-boot in CI
+      XNAT_SITE_URL: ${XNAT_SITE_URL:-http://localhost}
+      CATALINA_OPTS: >-
+        -Xms256m
+        -Xmx1g
+        -Dxnat.home=/data/xnat/home
+        -Dxnat.config=/data/xnat/home/config/xnat-conf.properties
+    # No persistent archive/build/cache in CI
+    volumes:
+      - ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war:/usr/local/tomcat/webapps/ROOT.war:ro
+      - ./xnat-conf/xnat-conf.properties:/data/xnat/home/config/xnat-conf.properties:ro
+      - type: tmpfs
+        target: /data/xnat/archive
+      - type: tmpfs
+        target: /data/xnat/build
+      - type: tmpfs
+        target: /data/xnat/cache
+    # Faster healthcheck so CI pipelines fail (or pass) sooner
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >
+          wget --quiet --spider --server-response
+          http://localhost:8080/xapi/siteConfig 2>&1
+          | grep -q '200 OK'
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s

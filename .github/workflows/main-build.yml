@@ -1,0 +1,149 @@
+# Main Branch Build Workflow
+#
+# Triggers on every push to main.
+# Runs a full build, packages the WAR, uploads it as a workflow artifact
+# so downstream jobs (smoke-test, cloud-deploy) can consume it, and
+# optionally publishes a snapshot to Artifactory when credentials are present.
+#
+# Required secrets (all optional — workflow degrades gracefully):
+#   XNAT_ARTIFACTORY_USER  — Artifactory username
+#   XNAT_ARTIFACTORY_TOKEN — Artifactory API token / password
+#
+# See CI_SECRETS.md for the full secrets reference.
+
+name: Main Build
+
+on:
+  push:
+    branches:
+      - main
+
+# Only one main-build run at a time; queue any new pushes.
+concurrency:
+  group: main-build
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write  # needed to upload/manage workflow artifacts
+
+jobs:
+  build:
+    name: Full Build & Package
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    outputs:
+      # Expose the artifact name so downstream workflows can download it.
+      war-artifact-name: ${{ steps.artifact-meta.outputs.name }}
+      git-sha-short: ${{ steps.artifact-meta.outputs.sha-short }}
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Source checkout
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # -----------------------------------------------------------------------
+      # 2. Java 21 (Temurin)
+      # -----------------------------------------------------------------------
+      - name: Set up Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # -----------------------------------------------------------------------
+      # 3. Gradle — full caching (this is the authoritative build, so writes
+      #    are always allowed)
+      # -----------------------------------------------------------------------
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      # -----------------------------------------------------------------------
+      # 4. Build — compile + test + WAR assembly
+      # -----------------------------------------------------------------------
+      - name: Build and package WAR
+        run: ./gradlew build --no-daemon --continue
+        env:
+          GRADLE_OPTS: "-Xmx2g -XX:+HeapDumpOnOutOfMemoryError"
+
+      # -----------------------------------------------------------------------
+      # 5. Derive artifact metadata (name, short SHA) for downstream use
+      # -----------------------------------------------------------------------
+      - name: Set artifact metadata
+        id: artifact-meta
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          ARTIFACT_NAME="xnat-web-war-${SHORT_SHA}"
+          echo "sha-short=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "name=${ARTIFACT_NAME}"  >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------------------
+      # 6. Upload WAR artifact (retained 30 days — long enough for deploy jobs)
+      # -----------------------------------------------------------------------
+      - name: Upload WAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact-meta.outputs.name }}
+          path: apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war
+          retention-days: 30
+          if-no-files-found: error
+
+      # -----------------------------------------------------------------------
+      # 7. Publish snapshot to Artifactory (skipped if credentials absent)
+      # -----------------------------------------------------------------------
+      - name: Check Artifactory credentials
+        id: artifactory-check
+        run: |
+          if [[ -n "${{ secrets.XNAT_ARTIFACTORY_USER }}" ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::XNAT_ARTIFACTORY_USER secret not set — skipping Artifactory publish."
+          fi
+
+      - name: Publish snapshot to Artifactory
+        if: steps.artifactory-check.outputs.present == 'true'
+        run: ./gradlew artifactoryPublish --no-daemon
+        env:
+          GRADLE_OPTS: "-Xmx2g"
+          ORG_GRADLE_PROJECT_artifactoryUser: ${{ secrets.XNAT_ARTIFACTORY_USER }}
+          ORG_GRADLE_PROJECT_artifactoryToken: ${{ secrets.XNAT_ARTIFACTORY_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # 8. Upload test reports on failure
+      # -----------------------------------------------------------------------
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-main-${{ steps.artifact-meta.outputs.sha-short }}
+          path: '**/build/reports/tests/'
+          retention-days: 7
+
+      # -----------------------------------------------------------------------
+      # 9. Persist a small metadata file that downstream workflow_run jobs can
+      #    read without having to parse step outputs across workflow boundaries.
+      # -----------------------------------------------------------------------
+      - name: Write build-info artifact
+        run: |
+          mkdir -p /tmp/build-info
+          cat > /tmp/build-info/build-info.env <<EOF
+          WAR_ARTIFACT_NAME=${{ steps.artifact-meta.outputs.name }}
+          GIT_SHA=${{ github.sha }}
+          GIT_SHA_SHORT=${{ steps.artifact-meta.outputs.sha-short }}
+          BUILD_RUN_ID=${{ github.run_id }}
+          EOF
+
+      - name: Upload build-info artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-info
+          path: /tmp/build-info/build-info.env
+          retention-days: 30

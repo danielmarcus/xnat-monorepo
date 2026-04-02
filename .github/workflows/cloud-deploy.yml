@@ -1,0 +1,255 @@
+# Cloud Deploy Workflow
+#
+# Triggered automatically after a successful smoke-test run on the main branch.
+# Uses Terraform to provision/update cloud infrastructure, deploys the WAR,
+# and runs a final smoke-test pass against the live cloud endpoint.
+#
+# The workflow is skipped gracefully when AWS credentials are absent, so it is
+# safe to keep in the repository even before cloud infrastructure is set up.
+#
+# The deployed environment is intentionally NOT torn down after the job so
+# that the running instance can serve as a staging/QA environment.
+#
+# Required secrets (all optional — workflow skips gracefully when absent):
+#   AWS_ACCESS_KEY_ID      — AWS access key for Terraform + deployment
+#   AWS_SECRET_ACCESS_KEY  — AWS secret key
+#   AWS_REGION             — Target AWS region (default: us-east-1)
+#   TF_BACKEND_BUCKET      — S3 bucket for Terraform remote state
+#   TF_BACKEND_KEY         — S3 key for Terraform state file
+#   TF_BACKEND_REGION      — Region of the state bucket (defaults to AWS_REGION)
+#   XNAT_CLOUD_HOST        — Hostname / IP of the deployed XNAT instance
+#   XNAT_CLOUD_ADMIN_PASS  — Admin password set during provisioning
+#
+# See CI_SECRETS.md for the full secrets reference.
+
+name: Cloud Deploy
+
+on:
+  workflow_run:
+    workflows:
+      - "Smoke Tests"
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read   # download artifacts from the triggering run
+  id-token: write # required for OIDC-based AWS auth (future enhancement)
+
+env:
+  TF_DIR: deploy/cloud/terraform
+  SCRIPTS_DIR: deploy/cloud/scripts
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Guard job — check that we should proceed before doing any real work.
+  # ---------------------------------------------------------------------------
+  preflight:
+    name: Preflight Checks
+    runs-on: ubuntu-latest
+    # Only run for successful smoke tests on the main branch.
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+
+    outputs:
+      should-deploy: ${{ steps.check-creds.outputs.proceed }}
+
+    steps:
+      - name: Check AWS credentials
+        id: check-creds
+        run: |
+          if [[ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::AWS credentials found — cloud deploy will proceed."
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AWS_ACCESS_KEY_ID secret not set — skipping cloud deploy."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Main deploy job
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Terraform + Deploy WAR
+    needs: preflight
+    if: needs.preflight.outputs.should-deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    environment:
+      name: cloud-staging
+      url: http://${{ secrets.XNAT_CLOUD_HOST }}/xnat
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout at the same SHA that was smoke-tested
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # -----------------------------------------------------------------------
+      # 2. Configure AWS credentials
+      # -----------------------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # -----------------------------------------------------------------------
+      # 3. Download build-info so we know which WAR artifact to fetch
+      # -----------------------------------------------------------------------
+      - name: Download build-info artifact
+        uses: actions/download-artifact@v4
+        with:
+          # The smoke-test job re-uploads build-info, or we pull from the
+          # original main-build run via the run-id stored in build-info.
+          name: build-info
+          path: /tmp/build-info
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load build-info into environment
+        run: |
+          while IFS='=' read -r key value; do
+            [[ -z "$key" || "$key" == \#* ]] && continue
+            key="$(echo "$key" | xargs)"
+            value="$(echo "$value" | xargs)"
+            echo "${key}=${value}" >> "$GITHUB_ENV"
+          done < /tmp/build-info/build-info.env
+
+      # -----------------------------------------------------------------------
+      # 4. Download the WAR from the main-build run referenced in build-info
+      # -----------------------------------------------------------------------
+      - name: Download WAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.WAR_ARTIFACT_NAME }}
+          path: /tmp/war
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Stage WAR
+        run: |
+          mkdir -p apps/web/build/libs
+          cp /tmp/war/web-1.10.0-RC2-SNAPSHOT.war apps/web/build/libs/
+
+      # -----------------------------------------------------------------------
+      # 5. Terraform setup
+      # -----------------------------------------------------------------------
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false   # keep raw output for script parsing
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_BACKEND_BUCKET }}" \
+            -backend-config="key=${{ secrets.TF_BACKEND_KEY }}" \
+            -backend-config="region=${{ secrets.TF_BACKEND_REGION || env.AWS_REGION }}" \
+            -input=false
+
+      - name: Terraform plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform plan \
+            -out=tfplan \
+            -input=false \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="git_sha=${{ env.GIT_SHA }}"
+
+      - name: Terraform apply
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -input=false tfplan
+
+      # -----------------------------------------------------------------------
+      # 6. Deploy WAR to the provisioned instance
+      # -----------------------------------------------------------------------
+      - name: Deploy WAR to cloud instance
+        run: |
+          # Use a deployment script if one exists; fall back to a direct S3 copy
+          # that the instance's user-data script will pick up on the next poll.
+          if [[ -f "${SCRIPTS_DIR}/deploy.sh" ]]; then
+            bash "${SCRIPTS_DIR}/deploy.sh" \
+              apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war \
+              "${{ secrets.XNAT_CLOUD_HOST }}"
+          else
+            echo "::notice::No deploy.sh found in ${SCRIPTS_DIR} — uploading WAR to S3 drop zone."
+            aws s3 cp \
+              apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war \
+              "s3://${{ secrets.TF_BACKEND_BUCKET }}/deploy/web-1.10.0-RC2-SNAPSHOT.war"
+          fi
+
+      # -----------------------------------------------------------------------
+      # 7. Wait for the cloud XNAT to become ready after deployment
+      # -----------------------------------------------------------------------
+      - name: Wait for cloud XNAT readiness
+        run: |
+          XNAT_URL="http://${{ secrets.XNAT_CLOUD_HOST }}/xnat"
+          MAX_WAIT=300
+          INTERVAL=10
+          elapsed=0
+          echo "Polling ${XNAT_URL} for XNAT readiness..."
+          until curl --silent --fail --output /dev/null "${XNAT_URL}/app/template/Login.vm"; do
+            if (( elapsed >= MAX_WAIT )); then
+              echo "::error::Cloud XNAT did not become ready within ${MAX_WAIT}s."
+              exit 1
+            fi
+            echo "  waiting... (${elapsed}s elapsed)"
+            sleep $INTERVAL
+            (( elapsed += INTERVAL ))
+          done
+          echo "Cloud XNAT is ready after ${elapsed}s."
+
+      # -----------------------------------------------------------------------
+      # 8. Run smoke tests against the cloud endpoint
+      # -----------------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install smoke-test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [[ -f smoke-tests/requirements.txt ]]; then
+            pip install -r smoke-tests/requirements.txt
+          else
+            pip install pytest requests pytest-html
+          fi
+
+      - name: Run cloud smoke tests
+        run: |
+          pytest smoke-tests/ \
+            --junitxml=cloud-smoke-test-results.xml \
+            --html=cloud-smoke-test-report.html \
+            --self-contained-html \
+            -v
+        env:
+          XNAT_BASE_URL: http://${{ secrets.XNAT_CLOUD_HOST }}/xnat
+          XNAT_USER: admin
+          XNAT_PASS: ${{ secrets.XNAT_CLOUD_ADMIN_PASS }}
+
+      # -----------------------------------------------------------------------
+      # 9. Upload smoke-test results
+      # -----------------------------------------------------------------------
+      - name: Upload cloud smoke-test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-smoke-test-results-${{ env.GIT_SHA_SHORT }}
+          path: |
+            cloud-smoke-test-results.xml
+            cloud-smoke-test-report.html
+          retention-days: 30
+
+      # NOTE: The cloud environment is NOT torn down — it remains running as a
+      # staging / QA environment.  Use terraform destroy manually when needed.

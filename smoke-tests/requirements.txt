@@ -1,0 +1,16 @@
+# XNAT smoke test suite — Python dependencies
+#
+# Install with:
+#   pip install -r requirements.txt
+
+# HTTP client used by all tests
+requests>=2.31.0
+
+# Test framework
+pytest>=8.0.0
+
+# HTML report generation (optional but recommended for local development)
+pytest-html>=4.1.0
+
+# JUnit XML reporting (built into pytest >= 6, listed for clarity)
+# No separate package needed — pytest --junitxml handles this natively.
