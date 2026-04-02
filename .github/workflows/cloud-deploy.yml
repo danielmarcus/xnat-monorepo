@@ -13,10 +13,11 @@
 # Required secrets (all optional — workflow skips gracefully when absent):
 #   AWS_ACCESS_KEY_ID      — AWS access key for Terraform + deployment
 #   AWS_SECRET_ACCESS_KEY  — AWS secret key
-#   AWS_REGION             — Target AWS region (default: us-east-1)
+#   AWS_REGION             — Target AWS region (default: us-east-2)
 #   TF_BACKEND_BUCKET      — S3 bucket for Terraform remote state
 #   TF_BACKEND_KEY         — S3 key for Terraform state file
 #   TF_BACKEND_REGION      — Region of the state bucket (defaults to AWS_REGION)
+#   CLOUD_SSH_KEY          — Private SSH key for ec2-user on the XNAT instance
 #   XNAT_CLOUD_HOST        — Hostname / IP of the deployed XNAT instance
 #   XNAT_CLOUD_ADMIN_PASS  — Admin password set during provisioning
 #
@@ -39,7 +40,7 @@ permissions:
 env:
   TF_DIR: deploy/cloud/terraform
   SCRIPTS_DIR: deploy/cloud/scripts
-  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-2' }}
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -162,29 +163,48 @@ jobs:
           terraform plan \
             -out=tfplan \
             -input=false \
-            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="aws_region=${{ secrets.AWS_REGION || 'us-east-2' }}" \
+            -var="key_name=github-actions-xnat" \
             -var="git_sha=${{ env.GIT_SHA }}"
 
       - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}
         run: terraform apply -input=false tfplan
 
+      - name: Export Terraform outputs
+        id: tf-outputs
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          INSTANCE_IP=$(terraform output -raw public_ip)
+          echo "instance_ip=${INSTANCE_IP}" >> "$GITHUB_OUTPUT"
+
       # -----------------------------------------------------------------------
       # 6. Deploy WAR to the provisioned instance
       # -----------------------------------------------------------------------
-      - name: Deploy WAR to cloud instance
+      - name: Install SSH key
         run: |
-          # Use a deployment script if one exists; fall back to a direct S3 copy
-          # that the instance's user-data script will pick up on the next poll.
+          mkdir -p ~/.ssh
+          echo "${{ secrets.CLOUD_SSH_KEY }}" > ~/.ssh/cloud_deploy_key
+          chmod 600 ~/.ssh/cloud_deploy_key
+          ssh-keyscan -H "${{ steps.tf-outputs.outputs.instance_ip }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy WAR to cloud instance
+        env:
+          INSTANCE_IP: ${{ steps.tf-outputs.outputs.instance_ip }}
+          SSH_KEY: ~/.ssh/cloud_deploy_key
+        run: |
+          # Prefer a deployment script; fall back to SCP + remote Docker Compose restart.
           if [[ -f "${SCRIPTS_DIR}/deploy.sh" ]]; then
-            bash "${SCRIPTS_DIR}/deploy.sh" \
+            SSH_KEY="${SSH_KEY}" bash "${SCRIPTS_DIR}/deploy.sh" \
               apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war \
-              "${{ secrets.XNAT_CLOUD_HOST }}"
+              "${INSTANCE_IP}"
           else
-            echo "::notice::No deploy.sh found in ${SCRIPTS_DIR} — uploading WAR to S3 drop zone."
-            aws s3 cp \
+            echo "::notice::No deploy.sh found — copying WAR directly via SCP."
+            scp -i "${SSH_KEY}" -o StrictHostKeyChecking=no \
               apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war \
-              "s3://${{ secrets.TF_BACKEND_BUCKET }}/deploy/web-1.10.0-RC2-SNAPSHOT.war"
+              "ec2-user@${INSTANCE_IP}:/home/ec2-user/xnat/apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war"
+            ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no "ec2-user@${INSTANCE_IP}" \
+              "cd /home/ec2-user/xnat && docker compose up -d --no-deps --build xnat"
           fi
 
       # -----------------------------------------------------------------------
@@ -192,7 +212,8 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Wait for cloud XNAT readiness
         run: |
-          XNAT_URL="http://${{ secrets.XNAT_CLOUD_HOST }}/xnat"
+          XNAT_HOST="${{ steps.tf-outputs.outputs.instance_ip }}"
+          XNAT_URL="http://${XNAT_HOST}/xnat"
           MAX_WAIT=300
           INTERVAL=10
           elapsed=0
@@ -234,7 +255,7 @@ jobs:
             --self-contained-html \
             -v
         env:
-          XNAT_BASE_URL: http://${{ secrets.XNAT_CLOUD_HOST }}/xnat
+          XNAT_BASE_URL: http://${{ steps.tf-outputs.outputs.instance_ip }}/xnat
           XNAT_USER: admin
           XNAT_PASS: ${{ secrets.XNAT_CLOUD_ADMIN_PASS }}
 

@@ -8,24 +8,12 @@
 variable "aws_region" {
   description = "AWS region in which to deploy the XNAT instance."
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
 }
 
 # ----------------------------------------------------------------------------
 # Networking
 # ----------------------------------------------------------------------------
-variable "vpc_id" {
-  description = "ID of the VPC in which to create the security group and instance."
-  type        = string
-  # No default — must be supplied via tfvars or -var flag
-}
-
-variable "subnet_id" {
-  description = "ID of the subnet in which to launch the EC2 instance.  Must be within vpc_id."
-  type        = string
-  # No default — must be supplied
-}
-
 variable "ssh_allowed_cidr_blocks" {
   description = "List of CIDR blocks allowed to reach port 22 (SSH).  Restrict to your operator IP(s)."
   type        = list(string)
@@ -49,6 +37,7 @@ variable "instance_type" {
 variable "key_name" {
   description = "Name of the EC2 key pair to associate with the instance for SSH access."
   type        = string
+  default     = "github-actions-xnat"
 }
 
 variable "root_volume_size_gb" {

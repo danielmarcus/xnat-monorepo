@@ -2,6 +2,21 @@
 # XNAT Monorepo — Terraform Outputs
 # ============================================================================
 
+output "vpc_id" {
+  description = "ID of the VPC created for the XNAT deployment."
+  value       = aws_vpc.xnat.id
+}
+
+output "subnet_id" {
+  description = "ID of the public subnet created for the XNAT instance."
+  value       = aws_subnet.xnat_public.id
+}
+
+output "internet_gateway_id" {
+  description = "ID of the internet gateway attached to the XNAT VPC."
+  value       = aws_internet_gateway.xnat.id
+}
+
 output "instance_id" {
   description = "The EC2 instance ID of the XNAT server."
   value       = aws_instance.xnat.id

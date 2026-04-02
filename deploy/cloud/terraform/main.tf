@@ -5,6 +5,10 @@
 # Docker Compose pre-installed.  The instance hosts the full XNAT stack
 # (PostgreSQL + Tomcat WAR) via the repo's docker-compose.yml.
 #
+# This configuration creates its own VPC, subnet, internet gateway, and route
+# table so it works in any AWS account regardless of whether a default VPC
+# exists.
+#
 # Usage (manual):
 #   terraform init   -backend-config=backend.conf
 #   terraform plan   -var-file=terraform.tfvars
@@ -63,12 +67,78 @@ data "aws_ami" "amazon_linux_2023" {
 }
 
 # ----------------------------------------------------------------------------
+# Data — availability zones in the target region
+# ----------------------------------------------------------------------------
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+# ----------------------------------------------------------------------------
+# VPC
+# ----------------------------------------------------------------------------
+resource "aws_vpc" "xnat" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "xnat-monorepo-${var.environment}"
+  }
+}
+
+# ----------------------------------------------------------------------------
+# Public Subnet — first AZ in the region
+# ----------------------------------------------------------------------------
+resource "aws_subnet" "xnat_public" {
+  vpc_id                  = aws_vpc.xnat.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "xnat-monorepo-${var.environment}-public"
+  }
+}
+
+# ----------------------------------------------------------------------------
+# Internet Gateway
+# ----------------------------------------------------------------------------
+resource "aws_internet_gateway" "xnat" {
+  vpc_id = aws_vpc.xnat.id
+
+  tags = {
+    Name = "xnat-monorepo-${var.environment}"
+  }
+}
+
+# ----------------------------------------------------------------------------
+# Route Table — default route via IGW
+# ----------------------------------------------------------------------------
+resource "aws_route_table" "xnat_public" {
+  vpc_id = aws_vpc.xnat.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.xnat.id
+  }
+
+  tags = {
+    Name = "xnat-monorepo-${var.environment}-public"
+  }
+}
+
+resource "aws_route_table_association" "xnat_public" {
+  subnet_id      = aws_subnet.xnat_public.id
+  route_table_id = aws_route_table.xnat_public.id
+}
+
+# ----------------------------------------------------------------------------
 # Security Group
 # ----------------------------------------------------------------------------
 resource "aws_security_group" "xnat" {
   name        = "xnat-monorepo-${var.environment}"
   description = "Allow SSH, HTTP, and HTTPS access to the XNAT instance"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.xnat.id
 
   # SSH — restricted to operator CIDR to reduce attack surface
   ingress {
@@ -115,11 +185,12 @@ resource "aws_security_group" "xnat" {
 # EC2 Instance
 # ----------------------------------------------------------------------------
 resource "aws_instance" "xnat" {
-  ami                    = data.aws_ami.amazon_linux_2023.id
-  instance_type          = var.instance_type
-  key_name               = var.key_name
-  subnet_id              = var.subnet_id
-  vpc_security_group_ids = [aws_security_group.xnat.id]
+  ami                         = data.aws_ami.amazon_linux_2023.id
+  instance_type               = var.instance_type
+  key_name                    = var.key_name
+  subnet_id                   = aws_subnet.xnat_public.id
+  vpc_security_group_ids      = [aws_security_group.xnat.id]
+  associate_public_ip_address = true
 
   # Ensure the root volume is large enough for Docker images + XNAT data
   root_block_device {
