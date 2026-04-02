@@ -1,0 +1,272 @@
+/*
+ * xnat-data-builder: build.gradle
+ * XNAT https://www.xnat.org
+ * Copyright (c) 2021, Washington University School of Medicine
+ * All Rights Reserved
+ *
+ * Released under the Simplified BSD.
+ */
+
+plugins {
+    id "groovy"
+    id "java-gradle-plugin"
+    id "maven-publish"
+    id "jacoco"
+    id "idea"
+    id "eclipse"
+    id "io.spring.dependency-management" version "1.0.11.RELEASE"
+    id "com.gradle.plugin-publish" version "1.3.0"
+    id "net.linguica.maven-settings" version "0.5"
+}
+
+group "org.nrg.xnat.build"
+version "1.10.0-RC2-SNAPSHOT"
+
+repositories {
+    mavenLocal()
+    maven { url "https://nrgxnat.jfrog.io/nrgxnat/libs-release" }
+    maven { url "https://nrgxnat.jfrog.io/nrgxnat/libs-snapshot" }
+    mavenCentral()
+}
+
+sourceCompatibility = 21
+targetCompatibility = 21
+
+dependencyManagement.imports {
+    mavenBom "org.nrg:parent:${project.version}"
+}
+
+// Importing versions and specifying them explicitly is required because the dependency
+// resolution doesn't work when this is imported as a plugin, i.e. versions won't resolve
+// when this plugin is called by another build.
+def vXnatDataModels = dependencyManagement.importedProperties["xnat-data-models.version"]
+def vXdatDataBuilder = dependencyManagement.importedProperties["xdat-data-builder.version"]
+def vXdat = dependencyManagement.importedProperties["xdat.version"]
+def vConfig = dependencyManagement.importedProperties["nrg.config.version"]
+def vPrefs = dependencyManagement.importedProperties["nrg.prefs.version"]
+def vMail = dependencyManagement.importedProperties["nrg.mail.version"]
+def vNotify = dependencyManagement.importedProperties["nrg.notify.version"]
+def vFramework = dependencyManagement.importedProperties["nrg.framework.version"]
+def vSpring = dependencyManagement.importedProperties["spring-framework.version"]
+def vSpringSecurity = dependencyManagement.importedProperties["spring-security.version"]
+def vSpringLdap = dependencyManagement.importedProperties["spring-ldap.version"]
+def vJackson = dependencyManagement.importedProperties["jackson.version"]
+def vSwagger = dependencyManagement.importedProperties["swagger.version"]
+def vCommonsConfiguration = dependencyManagement.importedProperties["commons-configuration.version"]
+def vCommonsCollections = dependencyManagement.importedProperties["commons-collections.version"]
+def vCommonsIo = dependencyManagement.importedProperties["commons-io.version"]
+def vCommonsLang3 = dependencyManagement.importedProperties["commons-lang3.version"]
+def vReflections = dependencyManagement.importedProperties["reflections.version"]
+def vServlet = dependencyManagement.importedProperties["servlet-api.version"]
+def vJgit= dependencyManagement.importedProperties["eclipse-jgit.version"]
+
+configurations.all {
+    exclude group: "avalon-framework"
+    exclude group: "avalon-logkit"
+    exclude group: "com.metaparadigm"
+    exclude group: "com.sun.mail"
+    exclude group: "excalibur-component"
+    exclude group: "excalibur-instrument"
+    exclude group: "excalibur-logger"
+    exclude group: "excalibur-pool"
+    exclude group: "fop"
+    exclude group: "geronimo-spec"
+    exclude group: "hsqldb"
+    exclude group: "imagej"
+    exclude group: "jamon"
+    exclude group: "jakarta-regexp"
+    exclude group: "org.apache.geronimo.specs"
+    exclude group: "velocity"
+    exclude group: "xmlrpc"
+    exclude group: "ant", module: "ant"
+    exclude group: "commons-email", module: "commons-email"
+    exclude group: "edu.ucar", module: "netcdf"
+    exclude group: "javax.jms", module: "jms"
+    exclude group: "javax.mail", module: "mail"
+    exclude group: "javax.servlet", module: "servlet-api"
+    exclude group: "javax.sql", module: "jdbc-stdext"
+    exclude group: "javax.transaction", module: "jta"
+    exclude group: "jdbc", module: "jdbc"
+    exclude group: "jms", module: "jms"
+    exclude group: "jython", module: "jython"
+    exclude group: "org.codehaus.groovy", module: "groovy-all"
+    exclude group: "org.nrg", module: "nrg"
+    exclude group: "net.sf.saxon", module: "saxon"
+    exclude group: "stax", module: "stax-api"
+    exclude group: "xerces"
+    exclude group: "xml-apis", module: "xml-apis"
+    exclude module: "commons-beanutils-core"
+    exclude module: "log4j-slf4j-impl"
+    exclude module: "pipelineCNDAXNAT"
+    exclude module: "slf4j-simple"
+    exclude group: "fulcrum"
+}
+
+dependencies {
+    annotationProcessor("org.nrg:framework:${vFramework}") {
+        transitive = false
+    }
+
+    implementation gradleApi()
+    implementation localGroovy()
+
+    implementation("org.nrg.xnat:xnat-data-models:${vXnatDataModels}") {
+        transitive = false
+    }
+    implementation("org.nrg.xdat.build:xdat-data-builder:${vXdatDataBuilder}") {
+        transitive = false
+    }
+    implementation("org.nrg.xdat:core:${vXdat}") {
+        transitive = false
+    }
+    implementation("org.nrg:config:${vConfig}") {
+        transitive = false
+    }
+    implementation("org.nrg:prefs:${vPrefs}") {
+        transitive = false
+    }
+    implementation("org.nrg:mail:${vMail}") {
+        transitive = false
+    }
+    implementation("org.nrg:notify:${vNotify}") {
+        transitive = false
+    }
+    implementation("org.nrg:framework:${vFramework}") {
+        transitive = false
+    }
+
+    implementation "org.eclipse.jgit:org.eclipse.jgit:${vJgit}"
+    implementation "org.reflections:reflections:${vReflections}"
+    implementation "org.apache.commons:commons-lang3:${vCommonsLang3}"
+
+    runtimeOnly "javax.servlet:javax.servlet-api:${vServlet}"
+    runtimeOnly "org.springframework:spring-aop:${vSpring}"
+    runtimeOnly "org.springframework:spring-beans:${vSpring}"
+    runtimeOnly "org.springframework:spring-context-support:${vSpring}"
+    runtimeOnly "org.springframework:spring-context:${vSpring}"
+    runtimeOnly "org.springframework:spring-core:${vSpring}"
+    runtimeOnly "org.springframework:spring-jdbc:${vSpring}"
+    runtimeOnly "org.springframework:spring-jms:${vSpring}"
+    runtimeOnly "org.springframework:spring-messaging:${vSpring}"
+    runtimeOnly "org.springframework:spring-orm:${vSpring}"
+    runtimeOnly "org.springframework:spring-oxm:${vSpring}"
+    runtimeOnly "org.springframework:spring-tx:${vSpring}"
+    runtimeOnly "org.springframework:spring-web:${vSpring}"
+    runtimeOnly "org.springframework:spring-webmvc:${vSpring}"
+
+    runtimeOnly "io.springfox:springfox-swagger2:${vSwagger}"
+    runtimeOnly "io.springfox:springfox-swagger-ui:${vSwagger}"
+
+    runtimeOnly "org.springframework.security:spring-security-acl:${vSpringSecurity}"
+    runtimeOnly "org.springframework.security:spring-security-aspects:${vSpringSecurity}"
+    runtimeOnly "org.springframework.security:spring-security-config:${vSpringSecurity}"
+    runtimeOnly "org.springframework.security:spring-security-ldap:${vSpringSecurity}"
+    runtimeOnly "org.springframework.security:spring-security-taglibs:${vSpringSecurity}"
+    runtimeOnly "org.springframework.ldap:spring-ldap-core:${vSpringLdap}"
+
+    runtimeOnly "com.fasterxml.jackson.core:jackson-annotations:${vJackson}"
+    runtimeOnly "com.fasterxml.jackson.core:jackson-core:${vJackson}"
+    runtimeOnly "com.fasterxml.jackson.core:jackson-databind:${vJackson}"
+    runtimeOnly "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:${vJackson}"
+    runtimeOnly "com.fasterxml.jackson.datatype:jackson-datatype-guava:${vJackson}"
+    runtimeOnly "com.fasterxml.jackson.datatype:jackson-datatype-hibernate5:${vJackson}"
+
+    runtimeOnly "commons-configuration:commons-configuration:${vCommonsConfiguration}"
+    runtimeOnly "commons-collections:commons-collections:${vCommonsCollections}"
+    runtimeOnly "commons-io:commons-io:${vCommonsIo}"
+
+    testImplementation "junit:junit"
+}
+
+task generatePluginMetadata {
+   ext {
+      metadataProperties = file("$buildDir/generated/xnat-data-builder-metadata.properties")
+   } 
+   outputs.file metadataProperties
+   doLast {
+      mkdir metadataProperties.parentFile
+      metadataProperties.text = "version=${project.version}" 
+   } 
+} 
+
+processResources {
+   from files(generatePluginMetadata) 
+} 
+
+gradlePlugin {
+    plugins {
+        xnatDataBuilderPlugin {
+            id = "org.nrg.xnat.build.xnat-data-builder"
+            implementationClass = "org.nrg.xnat.build.XnatDataBuilderPlugin"
+        }
+    }
+}
+
+jacoco {
+    toolVersion dependencyManagement.importedProperties["jacoco.version"] as String
+}
+
+jacocoTestReport {
+    reports {
+        xml.required = false
+        csv.required = false
+        html.required = true
+    }
+}
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
+
+jar {
+    dependsOn test
+    enabled = true
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+
+            pom.withXml {
+                def root = asNode()
+                root.appendNode("name", "Gradle XNAT plugin")
+                root.appendNode("description", "Gradle plugin supporting code generation and integration of the core XNAT web application and XNAT modules.")
+                root.appendNode("url", "https://bitbucket.org/xnatdev/xnat-data-builder")
+                root.appendNode("inceptionYear", "2016")
+
+                def scm = root.appendNode("scm")
+                scm.appendNode("url", "https://bitbucket.org/xnatdev/xnat-data-builder")
+                scm.appendNode("connection", "scm:https://bitbucket.org/xnatdev/xnat-data-builder.git")
+                scm.appendNode("developerConnection", "scm:git://bitbucket.org/xnatdev/xnat-data-builder.git")
+
+                def license = root.appendNode("licenses").appendNode("license")
+                license.appendNode("name", "Simplified BSD 2-Clause License")
+                license.appendNode("url", "https://xnat.org/about/license.php")
+                license.appendNode("distribution", "repo")
+
+                def developers = root.appendNode("developers")
+                def rherrick = developers.appendNode("developer")
+                rherrick.appendNode("id", "rherrick")
+                rherrick.appendNode("name", "Rick Herrick")
+                rherrick.appendNode("email", "jrherrick@wustl.edu")
+
+                def tolsen = developers.appendNode("developer")
+                tolsen.appendNode("id", "timolsen23")
+                tolsen.appendNode("name", "Tim Olsen")
+                tolsen.appendNode("email", "tim@radiologics.com")
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            url "https://nrgxnat.jfrog.io/nrgxnat/libs-${project.version.endsWith("-SNAPSHOT") ? "snapshot" : "release"}"
+            // The value for name must match <id> in ~/.m2/settings.xml
+            name = "XNAT_Artifactory"
+        }
+    }
+}
+
