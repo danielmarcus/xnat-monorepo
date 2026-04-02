@@ -144,22 +144,22 @@ def admin_session(base_url: str, admin_credentials: dict[str, str]) -> Session:
 
 
 # ---------------------------------------------------------------------------
-# Function-scoped fixtures (fresh per test)
+# Session-scoped fixtures (shared across all tests in the run)
 # ---------------------------------------------------------------------------
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def unique_id() -> str:
     """Short unique identifier (8 hex chars) for resource names."""
     return uuid.uuid4().hex[:8]
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def test_username(unique_id: str) -> str:
     """Username for a temporary test user (e.g. 'smoketest_a1b2c3d4')."""
     return f"smoketest_{unique_id}"
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def test_project_id(unique_id: str) -> str:
     """Project ID for a temporary test project (e.g. 'SMOKE_A1B2C3D4')."""
     return f"SMOKE_{unique_id.upper()}"
