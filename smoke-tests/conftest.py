@@ -89,23 +89,6 @@ def admin_session(base_url: str, admin_credentials: dict[str, str]) -> Session:
     if token:
         session.cookies.set("JSESSIONID", token)
 
-    # XNAT 1.10 requires CSRF tokens for mutating requests (POST/PUT/DELETE).
-    # Fetch a token and add it to the session headers.
-    csrf_response = session.get(
-        f"{base_url}/data/services/tokens/issue",
-        timeout=30,
-    )
-    if csrf_response.status_code == 200:
-        csrf_data = csrf_response.text.strip()
-        # Response format is "alias=TOKEN" or just the token
-        if "=" in csrf_data:
-            csrf_alias, csrf_secret = csrf_data.split("=", 1)
-        else:
-            csrf_alias, csrf_secret = csrf_data, ""
-        session.headers["XNAT-CSRF"] = csrf_alias
-        # Some XNAT versions use these header names
-        session.headers["X-XNAT-CSRF"] = csrf_alias
-
     yield session
 
     # Logout on teardown
