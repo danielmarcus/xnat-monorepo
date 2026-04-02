@@ -67,3 +67,7 @@ tasks.generateGrammarSource {
 tasks.named<JavaCompile>("compileJava") {
     dependsOn(tasks.generateGrammarSource)
 }
+
+tasks.named("sourcesJar") {
+    dependsOn(tasks.generateGrammarSource)
+}

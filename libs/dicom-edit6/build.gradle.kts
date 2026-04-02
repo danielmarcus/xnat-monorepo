@@ -91,3 +91,7 @@ sourceSets {
 tasks.named<JavaCompile>("compileJava") {
     dependsOn(generateGrammarSource)
 }
+
+tasks.named("sourcesJar") {
+    dependsOn(generateGrammarSource)
+}
