@@ -1,0 +1,312 @@
+/*
+ * xnat-data-models: build.gradle
+ * XNAT https://www.xnat.org
+ * Copyright (c) 2020, Washington University School of Medicine
+ * All Rights Reserved
+ *
+ * Released under the Simplified BSD.
+ */
+
+buildscript {
+    ext {
+        vXnat = "1.10.0-RC2-SNAPSHOT"
+    }
+}
+
+plugins {
+    id "eclipse"
+    id "idea"
+    id "jacoco"
+    id "java-library"
+    id "maven-publish"
+    id "com.bmuschko.cargo" version "2.8.0"
+    id "com.bmuschko.tomcat" version "2.7.0"
+    id "com.dorongold.task-tree" version "2.1.0"
+    id "com.palantir.git-version" version "0.12.1"
+    id "io.franzbecker.gradle-lombok" version "5.0.0"
+    id "io.spring.dependency-management" version "1.0.11.RELEASE"
+    id "net.linguica.maven-settings" version "0.5"
+    id "org.nrg.xdat.build.xdat-data-builder" version "1.10.0-SNAPSHOT"
+}
+
+group "org.nrg.xnat"
+version vXnat
+description "Contains the core data types for XNAT"
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url "https://nrgxnat.jfrog.io/nrgxnat/libs-release" }
+    maven { url "https://nrgxnat.jfrog.io/nrgxnat/libs-snapshot" }
+}
+
+configurations {
+    all {
+        exclude group: "avalon-framework"
+        exclude group: "avalon-logkit"
+        exclude group: "com.metaparadigm"
+        exclude group: "com.sun.mail"
+        exclude group: "excalibur-component"
+        exclude group: "excalibur-instrument"
+        exclude group: "excalibur-logger"
+        exclude group: "excalibur-pool"
+        exclude group: "fop"
+        exclude group: "geronimo-spec"
+        exclude group: "hsqldb"
+        exclude group: "imagej"
+        exclude group: "jamon"
+        exclude group: "jakarta-regexp"
+        exclude group: "org.apache.geronimo.specs"
+        exclude group: "velocity"
+        exclude group: "xmlrpc"
+        exclude group: "ant", module: "ant"
+        exclude group: "commons-email", module: "commons-email"
+        exclude group: "edu.ucar", module: "netcdf"
+        exclude group: "javax.jms", module: "jms"
+        exclude group: "javax.mail", module: "mail"
+        exclude group: "javax.servlet", module: "servlet-api"
+        exclude group: "javax.sql", module: "jdbc-stdext"
+        exclude group: "javax.transaction", module: "jta"
+	    exclude group: "javax.xml", module: "xml"
+        exclude group: "jdbc", module: "jdbc"
+        exclude group: "jms", module: "jms"
+        exclude group: "jython", module: "jython"
+        exclude group: "org.nrg", module: "nrg"
+        exclude group: "org.nrg.xdat", module: "beans"
+        exclude group: "net.sf.saxon", module: "saxon"
+        exclude group: "stax", module: "stax-api"
+        exclude group: "xml-apis", module: "xml-apis"
+        exclude group: "xerces"
+        exclude module: "commons-beanutils-core"
+        exclude module: "log4j-slf4j-impl"
+        exclude module: "pipelineCNDAXNAT"
+        exclude module: "slf4j-simple"
+    }
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.nrg:parent:${vXnat}"
+    }
+    generatedPomCustomization {
+        enabled = false
+    }
+}
+
+dependencies {
+    implementation platform("org.nrg:parent:${vXnat}")
+
+    implementation("org.nrg.xnat:web") {
+        transitive = false
+    }
+    implementation("org.nrg.xdat:core") {
+        transitive = false
+    }
+    implementation("org.nrg:notify") {
+        transitive = false
+    }
+    implementation("org.nrg:mail") {
+        transitive = false
+    }
+    implementation("org.nrg:automation") {
+        transitive = false
+    }
+    implementation("org.nrg:config") {
+        transitive = false
+    }
+    implementation("org.nrg:prefs") {
+        transitive = false
+    }
+    implementation("org.nrg:transaction") {
+        transitive = false
+    }
+    implementation("org.nrg:framework") {
+        transitive = false
+    }
+    implementation "org.springframework:spring-web"
+    implementation "org.springframework:spring-jdbc"
+    implementation "org.springframework.security:spring-security-core"
+    implementation "org.hibernate:hibernate-core"
+    implementation "io.projectreactor:reactor-bus"
+    implementation "org.apache.commons:commons-lang3"
+    implementation "org.restlet:org.restlet"
+    implementation "org.reflections:reflections"
+    implementation "javax.servlet:javax.servlet-api"
+    implementation "com.fasterxml.jackson.core:jackson-databind"
+    implementation "com.google.guava:guava"
+
+    implementation("turbine:turbine") {
+        transitive = false
+    }
+    implementation("org.apache.velocity:velocity") {
+        transitive = false
+    }
+
+    implementation "ecs:ecs"
+
+    implementation "org.slf4j:slf4j-api"
+    implementation "org.slf4j:slf4j-log4j12"
+    implementation "org.slf4j:jul-to-slf4j"
+
+    compileOnly "com.google.code.findbugs:jsr305"
+
+    testImplementation "junit:junit"
+    testImplementation "org.springframework:spring-test"
+}
+
+idea {
+    module {
+        inheritOutputDirs = false
+        outputDir = compileJava.destinationDir
+        testOutputDir = compileTestJava.destinationDir
+    }
+}
+
+
+jacoco {
+    toolVersion = dependencyManagement.importedProperties["jacoco.version"] as String
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = false
+        csv.required = true
+        html.required = true
+    }
+}
+
+tasks.withType(Jar){
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    withJavadocJar()
+    withSourcesJar()
+}
+
+lombok {
+    version = dependencyManagement.importedProperties["lombok.version"] as String
+    sha256 = dependencyManagement.importedProperties["lombok.checksum"] as String
+}
+
+// Pulls in the Jenkins BUILD_NUMBER environment variable if available.
+def buildDate = new Date()
+def buildNumber = System.getenv().BUILD_NUMBER?.toInteger() ?: "Manual"
+def isDirty, branchName, gitHash, gitHashFull, commitDistance, lastTag, isCleanTag
+
+try {
+    def gitDetails = versionDetails()
+    isDirty = gitVersion().endsWith ".dirty"
+    branchName = gitDetails.branchName ?: "Unknown"
+    gitHash = gitDetails.gitHash
+    gitHashFull = gitDetails.gitHashFull
+    commitDistance = gitDetails.commitDistance
+    lastTag = gitDetails.lastTag
+    isCleanTag = gitDetails.isCleanTag
+} catch (IllegalArgumentException ignored) {
+    logger.info "Got an error trying to read VCS metadata from git. It's possible this project is not under VCS control. Using placeholder values for manifest entries."
+    isDirty = true
+    branchName = "Unknown"
+    gitHash = "None"
+    gitHashFull = "None"
+    commitDistance = 0
+    lastTag = "None"
+    isCleanTag = false
+}
+
+ext.gitManifest = manifest {
+    attributes "Application-Name": project.description,
+            "Build-Date": buildDate,
+            "Build-Number": buildNumber,
+            "Implementation-Version": project.version,
+            "Implementation-Sha": gitHash,
+            "Implementation-Sha-Full": gitHashFull,
+            "Implementation-Commit": commitDistance,
+            "Implementation-LastTag": lastTag,
+            "Implementation-Branch": branchName,
+            "Implementation-CleanTag": isCleanTag,
+            "Implementation-Dirty": isDirty
+}
+
+tasks.withType(Javadoc) {
+    options.addStringOption("Xdoclint:none", "-quiet")
+}
+
+jar {
+    dependsOn test
+    manifest {
+        from gitManifest
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir "build/xnat-generated/src/main/java"
+        }
+        resources {
+            srcDir "build/xnat-generated/src/main/resources"
+        }
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+
+            pom.withXml {
+                def root = asNode()
+                root.appendNode("name", "XNAT Data Models")
+                root.appendNode("url", "https://bitbucket.org/xnatdev/xnat-data-plugin")
+                root.appendNode("inceptionYear", "2016")
+
+                def scm = root.appendNode("scm")
+                scm.appendNode("url", "https://bitbucket.org/xnatdev/xnat-data-plugin")
+                scm.appendNode("connection", "scm:https://bitbucket.org/xnatdev/xnat-data-plugin.git")
+                scm.appendNode("developerConnection", "scm:git://bitbucket.org/xnatdev/xnat-data-plugin.git")
+
+                def license = root.appendNode("licenses").appendNode("license")
+                license.appendNode("name", "Simplified BSD 2-Clause License")
+                license.appendNode("url", "https://xnat.org/about/license.php")
+                license.appendNode("distribution", "repo")
+
+                def developers = root.appendNode("developers")
+
+                def tolsen = developers.appendNode("developer")
+                tolsen.appendNode("id", "timolsen23")
+                tolsen.appendNode("name", "Tim Olsen")
+                tolsen.appendNode("email", "tim@deck5consulting.com")
+
+                def rherrick = developers.appendNode("developer")
+                rherrick.appendNode("id", "rherrick")
+                rherrick.appendNode("name", "Rick Herrick")
+                rherrick.appendNode("email", "jrherrick@wustl.edu")
+
+                def mfmckay = developers.appendNode("developer")
+                mfmckay.appendNode("id", "mfmckay")
+                mfmckay.appendNode("name", "Mike McKay")
+                mfmckay.appendNode("email", "mfmckay@wustl.edu")
+
+                def kalpert = developers.appendNode("developer")
+                kalpert.appendNode("id", "kalpert")
+                kalpert.appendNode("name", "Kate Alpert")
+                kalpert.appendNode("email", "kate@radiologics.com")
+            }
+        }
+    }
+    repositories {
+        maven {
+            url "https://nrgxnat.jfrog.io/nrgxnat/libs-${project.version.endsWith("-SNAPSHOT") ? "snapshot" : "release"}-local"
+            // The value for name must match <id> in ~/.m2/settings.xml
+            name = "XNAT_Artifactory"
+        }
+    }
+}
+
+def propertyWithDefault(String name, Object value) {
+    hasProperty(name) ? property(name) : value
+}

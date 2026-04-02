@@ -1,0 +1,49 @@
+/*
+ * xnat-data-models: org.nrg.xdat.om.base.BaseXnatRtsessiondata
+ * XNAT http://www.xnat.org
+ * Copyright (c) 2017, Washington University School of Medicine
+ * All Rights Reserved
+ *
+ * Released under the Simplified BSD.
+ */
+package org.nrg.xdat.om.base;
+
+import org.nrg.xdat.om.base.auto.AutoXnatRtsessiondata;
+import org.nrg.xft.ItemI;
+import org.nrg.xft.security.UserI;
+
+import java.io.Serial;
+import java.util.Hashtable;
+
+/**
+ * @author XDAT
+ *
+ */
+@SuppressWarnings({"unchecked","rawtypes"})
+public abstract class BaseXnatRtsessiondata extends AutoXnatRtsessiondata {
+
+    @Serial
+    private static final long serialVersionUID = 1;
+
+	public BaseXnatRtsessiondata(ItemI item)
+	{
+		super(item);
+	}
+
+	public BaseXnatRtsessiondata(UserI user)
+	{
+		super(user);
+	}
+
+	/*
+	 * @deprecated Use BaseXnatRtsessiondata(UserI user)
+	 **/
+	public BaseXnatRtsessiondata()
+	{}
+
+	public BaseXnatRtsessiondata(Hashtable properties, UserI user)
+	{
+		super(properties,user);
+	}
+
+}
