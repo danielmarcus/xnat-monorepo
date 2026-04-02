@@ -79,15 +79,27 @@ def admin_session(base_url: str, admin_credentials: dict[str, str]) -> Session:
             "username": admin_credentials["username"],
             "password": admin_credentials["password"],
         },
+        params={"CSRF": "true"},  # Request CSRF token in response
         timeout=30,
     )
     response.raise_for_status()
 
-    # XNAT returns the session token in the response body (plain text) and as
-    # a JSESSIONID cookie.  Either works; requests stores the cookie automatically.
-    token = response.text.strip()
-    if token:
-        session.cookies.set("JSESSIONID", token)
+    # XNAT returns "JSESSIONID; XNAT_CSRF=<token>" when CSRF=true is passed.
+    body = response.text.strip()
+    jsessionid = body
+    xnat_csrf = None
+
+    if ";" in body:
+        parts = body.split(";")
+        jsessionid = parts[0].strip()
+        for part in parts[1:]:
+            part = part.strip()
+            if part.startswith("XNAT_CSRF="):
+                xnat_csrf = part.split("=", 1)[1]
+
+    session.cookies.set("JSESSIONID", jsessionid)
+    if xnat_csrf:
+        session.cookies.set("XNAT_CSRF", xnat_csrf)
 
     yield session
 
