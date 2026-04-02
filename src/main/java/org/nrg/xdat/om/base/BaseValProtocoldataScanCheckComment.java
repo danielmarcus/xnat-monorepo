@@ -1,0 +1,49 @@
+/*
+ * xnat-data-models: org.nrg.xdat.om.base.BaseValProtocoldataScanCheckComment
+ * XNAT http://www.xnat.org
+ * Copyright (c) 2017, Washington University School of Medicine
+ * All Rights Reserved
+ *
+ * Released under the Simplified BSD.
+ */
+package org.nrg.xdat.om.base;
+
+import org.nrg.xdat.om.base.auto.AutoValProtocoldataScanCheckComment;
+import org.nrg.xft.ItemI;
+import org.nrg.xft.security.UserI;
+
+import java.io.Serial;
+import java.util.Hashtable;
+
+/**
+ * @author XDAT
+ *
+ */
+@SuppressWarnings({"unchecked","rawtypes"})
+public abstract class BaseValProtocoldataScanCheckComment extends AutoValProtocoldataScanCheckComment {
+
+    @Serial
+    private static final long serialVersionUID = 1;
+
+	public BaseValProtocoldataScanCheckComment(ItemI item)
+	{
+		super(item);
+	}
+
+	public BaseValProtocoldataScanCheckComment(UserI user)
+	{
+		super(user);
+	}
+
+	/*
+	 * @deprecated Use BaseValProtocoldataScanCheckComment(UserI user)
+	 **/
+	public BaseValProtocoldataScanCheckComment()
+	{}
+
+	public BaseValProtocoldataScanCheckComment(Hashtable properties, UserI user)
+	{
+		super(properties,user);
+	}
+
+}

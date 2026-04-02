@@ -1,0 +1,49 @@
+/*
+ * xnat-data-models: org.nrg.xdat.om.base.BaseXnatStudyprotocolCondition
+ * XNAT http://www.xnat.org
+ * Copyright (c) 2017, Washington University School of Medicine
+ * All Rights Reserved
+ *
+ * Released under the Simplified BSD.
+ */
+package org.nrg.xdat.om.base;
+
+import org.nrg.xdat.om.base.auto.AutoXnatStudyprotocolCondition;
+import org.nrg.xft.ItemI;
+import org.nrg.xft.security.UserI;
+
+import java.io.Serial;
+import java.util.Hashtable;
+
+/**
+ * @author XDAT
+ *
+ */
+@SuppressWarnings({"unchecked","rawtypes"})
+public class BaseXnatStudyprotocolCondition extends AutoXnatStudyprotocolCondition {
+
+    @Serial
+    private static final long serialVersionUID = 1;
+
+	public BaseXnatStudyprotocolCondition(ItemI item)
+	{
+		super(item);
+	}
+
+	public BaseXnatStudyprotocolCondition(UserI user)
+	{
+		super(user);
+	}
+
+	/*
+	 * @deprecated Use BaseXnatStudyprotocolCondition(UserI user)
+	 **/
+	public BaseXnatStudyprotocolCondition()
+	{}
+
+	public BaseXnatStudyprotocolCondition(Hashtable properties, UserI user)
+	{
+		super(properties,user);
+	}
+
+}
