@@ -37,7 +37,7 @@ variable "instance_type" {
 variable "key_name" {
   description = "Name of the EC2 key pair to associate with the instance for SSH access."
   type        = string
-  default     = "github-actions-xnat"
+  default     = "github-actions-xnat-v2"
 }
 
 variable "root_volume_size_gb" {

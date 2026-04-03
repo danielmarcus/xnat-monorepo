@@ -169,7 +169,7 @@ jobs:
             -out=tfplan \
             -input=false \
             -var="aws_region=${{ secrets.AWS_REGION || 'us-east-2' }}" \
-            -var="key_name=github-actions-xnat" \
+            -var="key_name=github-actions-xnat-v2" \
             -var="git_sha=${{ env.GIT_SHA }}"
 
       - name: Terraform apply
