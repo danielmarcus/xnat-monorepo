@@ -1,18 +1,13 @@
 # XNAT
 
-<!-- XNAT Logo Placeholder -->
-<!--
-  TODO: Replace with official XNAT logo once assets are added to this repo.
   <img src="docs/assets/xnat-logo.png" alt="XNAT Logo" width="300"/>
--->
 
 [![License](https://img.shields.io/badge/License-BSD_2--Clause-blue.svg)](LICENSE)
 [![Build](https://github.com/NrgXnat/xnat/actions/workflows/main-build.yml/badge.svg)](https://github.com/NrgXnat/xnat/actions)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://adoptium.net/)
 
-**XNAT** is an open-source neuroimaging informatics platform developed at
-Washington University in St. Louis and supported by the Radiological Society
-of North America (RSNA). It facilitates common management, productivity, and
+**XNAT** is an open-source neuroimaging informatics platform developed by the Neuroinformatics Research Group at
+Washington University in St. Louis. It facilitates common management, productivity, and
 quality assurance tasks for neuroimaging and associated data.
 
 This repository is the **monorepo for XNAT core**, consolidating all
@@ -21,7 +16,7 @@ It was migrated from 24 individual repositories at the `releases/1.10.0-rc`
 branch point and targets **Java 21** and **Gradle 8**.
 
 > For general information, hosted instances, and community resources, visit
-> [xnat.org](https://www.xnat.org/).
+> [xnat.org](https://www.xnat.org/). XNAT is supported through generous funding from the National Institutes of Health, [Yosemite](https://yosemite.co/), and the [Mallinckrodt Institute of Radiology](https://www.mir.wustl.edu/)  
 
 ---
 
