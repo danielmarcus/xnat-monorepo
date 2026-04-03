@@ -202,10 +202,11 @@ resource "aws_instance" "xnat" {
 
   # User-data: installs Docker, Docker Compose v2, and pulls the deploy script
   user_data = templatefile("${path.module}/user_data.sh.tpl", {
-    xnat_version    = var.xnat_version
+    xnat_version     = var.xnat_version
     deploy_s3_bucket = var.deploy_s3_bucket
     xnat_admin_pass  = var.xnat_admin_password
     environment      = var.environment
+    COMPOSE_VERSION  = "2.29.1"
   })
 
   user_data_replace_on_change = true
