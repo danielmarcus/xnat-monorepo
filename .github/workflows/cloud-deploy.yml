@@ -89,8 +89,6 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       # -----------------------------------------------------------------------
       # 2. Configure AWS credentials
@@ -103,16 +101,23 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       # -----------------------------------------------------------------------
-      # 3. Download build-info so we know which WAR artifact to fetch
+      # 3. Find the latest successful Main Build run and download its artifacts
       # -----------------------------------------------------------------------
+      - name: Find latest Main Build run
+        id: find-build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_ID=$(gh run list --workflow main-build.yml --status success --limit 1 --json databaseId -q '.[0].databaseId')
+          echo "run-id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "Using Main Build run: $RUN_ID"
+
       - name: Download build-info artifact
         uses: actions/download-artifact@v4
         with:
-          # The smoke-test job re-uploads build-info, or we pull from the
-          # original main-build run via the run-id stored in build-info.
           name: build-info
           path: /tmp/build-info
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.find-build.outputs.run-id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Load build-info into environment
