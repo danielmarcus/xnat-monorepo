@@ -193,6 +193,19 @@ jobs:
           chmod 600 ~/.ssh/cloud_deploy_key
           ssh-keyscan -H "${{ steps.tf-outputs.outputs.instance_ip }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
+      - name: Wait for EC2 SSH readiness
+        run: |
+          echo "Waiting for EC2 instance to accept SSH connections..."
+          for i in $(seq 1 30); do
+            if ssh -i ~/.ssh/cloud_deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+               "ec2-user@${{ steps.tf-outputs.outputs.instance_ip }}" "echo ready" 2>/dev/null; then
+              echo "SSH is ready after $((i * 10))s"
+              break
+            fi
+            echo "  attempt $i/30 — not ready yet"
+            sleep 10
+          done
+
       - name: Deploy WAR to cloud instance
         env:
           INSTANCE_IP: ${{ steps.tf-outputs.outputs.instance_ip }}
