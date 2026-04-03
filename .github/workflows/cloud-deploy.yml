@@ -209,13 +209,14 @@ jobs:
       - name: Deploy WAR to cloud instance
         env:
           INSTANCE_IP: ${{ steps.tf-outputs.outputs.instance_ip }}
-          SSH_KEY: ~/.ssh/cloud_deploy_key
+          SSH_KEY_FILE: ~/.ssh/cloud_deploy_key
         run: |
           # Prefer a deployment script; fall back to SCP + remote Docker Compose restart.
           if [[ -f "${SCRIPTS_DIR}/deploy.sh" ]]; then
-            SSH_KEY="${SSH_KEY}" bash "${SCRIPTS_DIR}/deploy.sh" \
+            bash "${SCRIPTS_DIR}/deploy.sh" \
               apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war \
-              "${INSTANCE_IP}"
+              "${INSTANCE_IP}" \
+              -i "${SSH_KEY_FILE}"
           else
             echo "::notice::No deploy.sh found — copying WAR directly via SCP."
             scp -i "${SSH_KEY}" -o StrictHostKeyChecking=no \
