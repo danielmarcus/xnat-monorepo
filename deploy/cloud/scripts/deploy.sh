@@ -128,18 +128,13 @@ info "Step 3/5 — Copying Docker Compose stack files..."
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 COMPOSE_SRC="${REPO_ROOT}/deploy/docker-compose/docker-compose.yml"
 
-if [[ -f "$COMPOSE_SRC" ]]; then
-  scp "${SSH_OPTS[@]/#-p/-P}" "$COMPOSE_SRC" "${SSH_USER}@${HOST}:${DEPLOY_DIR}/docker-compose.yml"
-  success "docker-compose.yml copied from ${COMPOSE_SRC}"
+COMPOSE_DIR="${REPO_ROOT}/deploy/docker-compose"
+if [[ -d "$COMPOSE_DIR" ]]; then
+  # Copy entire docker-compose directory (includes Dockerfile, configs, scripts)
+  scp -r "${SSH_OPTS[@]/#-p/-P}" "$COMPOSE_DIR"/* "${SSH_USER}@${HOST}:${DEPLOY_DIR}/"
+  success "Docker Compose files copied from ${COMPOSE_DIR}"
 else
-  warn "docker-compose.yml not found at ${COMPOSE_SRC} — using the version already on the server."
-fi
-
-# Copy optional .env file if present alongside the compose file
-COMPOSE_ENV="${REPO_ROOT}/deploy/docker-compose/.env"
-if [[ -f "$COMPOSE_ENV" ]]; then
-  scp "${SSH_OPTS[@]/#-p/-P}" "$COMPOSE_ENV" "${SSH_USER}@${HOST}:${DEPLOY_DIR}/.env"
-  info ".env file staged."
+  warn "docker-compose directory not found at ${COMPOSE_DIR} — using files already on the server."
 fi
 echo ""
 
