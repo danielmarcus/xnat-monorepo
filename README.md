@@ -1,6 +1,6 @@
 # XNAT
 
-  <img src="docs/assets/xnat-logo.png" alt="XNAT Logo" width="300"/>
+  <img src="docs/assets/xnat.png" alt="XNAT Logo" width="300"/>
 
 [![License](https://img.shields.io/badge/License-BSD_2--Clause-blue.svg)](LICENSE)
 [![Build](https://github.com/NrgXnat/xnat/actions/workflows/main-build.yml/badge.svg)](https://github.com/NrgXnat/xnat/actions)
