@@ -25,8 +25,9 @@ on:
 
 permissions:
   contents: read
-  actions: read    # download artifacts from the triggering workflow run
-  checks: write    # publish JUnit XML results as check annotations
+  actions: read           # download artifacts from the triggering workflow run
+  checks: write           # publish JUnit XML results as check annotations
+  pull-requests: write    # required by publish-unit-test-result-action
 
 jobs:
   smoke-test:
@@ -166,6 +167,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Publish smoke-test results
         if: always()
+        continue-on-error: true
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
           files: smoke-test-results.xml
