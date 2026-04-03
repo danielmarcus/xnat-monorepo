@@ -42,7 +42,7 @@ SSH_USER="${SSH_USER:-ec2-user}"
 SSH_KEY_FILE="${SSH_KEY_FILE:-}"
 SSH_PORT="${SSH_PORT:-22}"
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/xnat-deploy}"
-XNAT_READY_TIMEOUT="${XNAT_READY_TIMEOUT:-300}"
+XNAT_READY_TIMEOUT="${XNAT_READY_TIMEOUT:-600}"
 XNAT_READY_INTERVAL=10
 
 # ---- Colours (suppressed when not a terminal) -------------------------------
@@ -166,10 +166,10 @@ echo ""
 
 # ---- Step 5: Wait for XNAT readiness ----------------------------------------
 info "Step 5/5 — Waiting for XNAT to become ready (timeout: ${XNAT_READY_TIMEOUT}s)..."
-XNAT_URL="http://${HOST}/xnat"
+XNAT_URL="http://${HOST}"
 elapsed=0
 
-until curl --silent --fail --max-time 5 --output /dev/null "${XNAT_URL}/app/template/Login.vm" 2>/dev/null; do
+until http_code=$(curl --silent --output /dev/null --write-out "%{http_code}" --max-time 5 "${XNAT_URL}/xapi/siteConfig" 2>/dev/null) && [[ "$http_code" == "200" || "$http_code" == "401" || "$http_code" == "302" ]]; do
   if (( elapsed >= XNAT_READY_TIMEOUT )); then
     die "XNAT did not become ready within ${XNAT_READY_TIMEOUT}s at ${XNAT_URL}.  Check logs with: ssh ${SSH_USER}@${HOST} 'docker compose -C ${DEPLOY_DIR} logs --tail=100 xnat-web'"
   fi
