@@ -150,13 +150,22 @@ if ! systemctl is-active --quiet docker; then
   sudo systemctl start docker
 fi
 
+# Create cloud override to fix WAR mount path (local dev uses relative path)
+cat > docker-compose.cloud.yml <<'CLOUDEOF'
+services:
+  xnat-web:
+    volumes:
+      - ./xnat.war:/usr/local/tomcat/webapps/ROOT.war:ro
+      - ./xnat-conf/xnat-conf.properties:/data/xnat/home/config/xnat-conf.properties:ro
+CLOUDEOF
+
 # Pull the latest images before bringing the stack up
 echo "Pulling Docker images..."
-docker compose pull --quiet 2>/dev/null || true
+docker compose -f docker-compose.yml -f docker-compose.cloud.yml pull --quiet 2>/dev/null || true
 
 # Bring up the stack (recreate xnat-web so the new WAR is picked up)
 echo "Starting stack..."
-docker compose up -d --force-recreate --no-deps xnat-web xnat-db
+docker compose -f docker-compose.yml -f docker-compose.cloud.yml up -d --force-recreate
 
 echo "Stack started."
 docker compose ps
