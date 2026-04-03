@@ -116,7 +116,7 @@ echo ""
 # ---- Step 2: Copy the WAR to the EC2 instance --------------------------------
 info "Step 2/5 — Copying WAR to ${HOST}:${DEPLOY_DIR}..."
 WAR_FILENAME="$(basename "$WAR_FILE")"
-remote "sudo mkdir -p ${DEPLOY_DIR} && sudo chown ${SSH_USER}:${SSH_USER} ${DEPLOY_DIR}"
+remote "sudo mkdir -p ${DEPLOY_DIR} && sudo chown -R ${SSH_USER}:${SSH_USER} ${DEPLOY_DIR}"
 scp "${SSH_OPTS[@]/#-p/-P}" "$WAR_FILE" "${SSH_USER}@${HOST}:${DEPLOY_DIR}/${WAR_FILENAME}"
 # Also stage a generic name the docker-compose volume mount can reference
 remote "cp ${DEPLOY_DIR}/${WAR_FILENAME} ${DEPLOY_DIR}/xnat.war"
