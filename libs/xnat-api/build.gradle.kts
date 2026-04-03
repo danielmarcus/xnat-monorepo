@@ -54,4 +54,21 @@ tasks.named<Jar>("jar") {
     exclude("org/nrg/xnat/helpers/merge/ProjectAnonymizer\$*.class")
     exclude("org/nrg/xnat/restlet/resources/ScriptTriggerTemplateResource.class")
     exclude("org/nrg/xnat/ajax/writer/JSONWriter.class")
+    // ScanType facades use Object params instead of XnatImagescandataI — exclude to avoid descriptor mismatch
+    exclude("org/nrg/xnat/helpers/scanType/ScanTypeMappingI.class")
+    exclude("org/nrg/xnat/helpers/scanType/AbstractScanTypeMapping.class")
+    exclude("org/nrg/xnat/helpers/scanType/AbstractScanTypeMapping\$*.class")
+    exclude("org/nrg/xnat/helpers/scanType/ImageScanTypeMapping.class")
+    exclude("org/nrg/xnat/helpers/scanType/ImageScanTypeMapping\$*.class")
+    // Other facades with Object params that may cause descriptor mismatch
+    exclude("org/nrg/xnat/turbine/utils/ArchivableItem.class")
+    exclude("org/nrg/xnat/turbine/utils/CatalogSet.class")
+    exclude("org/nrg/xnat/turbine/utils/CatalogSet\$*.class")
+    exclude("org/nrg/xdat/om/base/MoveableI.class")
+    exclude("org/nrg/xdat/om/base/MoverMaker.class")
+    exclude("org/nrg/xdat/om/base/MoverMaker\$*.class")
+    exclude("org/nrg/xnat/turbine/modules/screens/EditSubjectAssessorScreen.class")
+    exclude("org/nrg/xnat/turbine/modules/screens/EditImageAssessorScreen.class")
+    exclude("org/nrg/xnat/utils/WorkflowUtils.class")
+    exclude("org/nrg/xnat/utils/WorkflowUtils\$*.class")
 }

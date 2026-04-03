@@ -2116,7 +2116,15 @@ public abstract class BaseXnatImagesessiondata extends AutoXnatImagesessiondata 
                 }
 
 
-                mappers.get(scan.getXSIType()).setType(scan);
+                // Use reflection to call setType() — the facade compiled with Object param
+                // but the real interface uses XnatImagescandataI, causing descriptor mismatch.
+                try {
+                    ScanTypeMappingI mapper = mappers.get(scan.getXSIType());
+                    java.lang.reflect.Method setTypeMethod = mapper.getClass().getMethod("setType", org.nrg.xdat.model.XnatImagescandataI.class);
+                    setTypeMethod.invoke(mapper, scan);
+                } catch (Exception e) {
+                    logger.error("Failed to invoke setType via reflection", e);
+                }
 
             	if(scan.getFile().size()>0){
         			XnatAbstractresourceI abstRes=scan.getFile().getFirst();
