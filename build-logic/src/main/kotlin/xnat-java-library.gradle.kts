@@ -32,6 +32,27 @@ configurations.all {
         // Various transitive deps pull in SLF4J 2.x which is incompatible.
         force("org.slf4j:slf4j-api:1.7.36")
     }
+
+    // Strip obsolete XML parser jars. Turbine 2.3.3 (and its Apache Avalon
+    // / Excalibur chain) drag in xerces 2.6.2 (2004), xml-apis 1.0.b2, and
+    // xalan 2.4.1 — all pre-JAXP-1.3. Once any of those land on the
+    // classpath, Java's SPI lookup picks them up first via
+    // META-INF/services/javax.xml.parsers.DocumentBuilderFactory, and
+    // ehcache's XmlConfiguration parser then crashes:
+    //
+    //   UnsupportedOperationException: This parser does not support
+    //   specification "null" version "null"
+    //     at javax.xml.parsers.DocumentBuilderFactory.setSchema(...)
+    //     at org.ehcache.xml.ConfigurationParser.documentBuilder(...)
+    //
+    // The JDK ships a fully-conformant Xerces in the java.xml module, so
+    // dropping these jars unblocks every modern JAXP consumer (Hibernate,
+    // ehcache, Jackson XML, etc.) without losing any functionality.
+    // apps/web/build.gradle.kts has the same excludes inline; this central
+    // copy covers every library module.
+    exclude(group = "xerces")
+    exclude(group = "xml-apis")
+    exclude(group = "xalan")
 }
 
 // ---------------------------------------------------------------------------
