@@ -124,6 +124,9 @@ dependencies {
     compileOnly("com.google.code.findbugs:jsr305:3.0.2")
 
     // --- Test ---
+    // libs:test exposes org.nrg.test.utils.{TestBeans,TestFileUtils} that
+    // TestXdatUserAuthServiceConfig imports.
+    testImplementation(project(":libs:test"))
     testImplementation(libs.junit4)
     testImplementation(libs.mockito.core)
     testImplementation(libs.spring.test)

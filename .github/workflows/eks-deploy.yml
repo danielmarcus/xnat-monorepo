@@ -235,7 +235,7 @@ jobs:
           path: |
             eks-smoke-results-fast.xml
             eks-smoke-results-full.xml
-          retention-days: 30
+          retention-days: 7
 
       - name: Capture pod logs on failure
         if: failure()

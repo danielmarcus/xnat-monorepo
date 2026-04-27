@@ -35,6 +35,9 @@ dependencies {
     compileOnly("com.google.code.findbugs:jsr305:3.0.2")
 
     // --- Test ---
+    // libs:test exposes org.nrg.test.utils.{TestBeans,TestFileUtils} that
+    // DefaultResolverConfiguration imports.
+    testImplementation(project(":libs:test"))
     testImplementation(libs.spring.test)
     testImplementation(libs.spring.context.support)
     testImplementation(libs.junit.jupiter.api)

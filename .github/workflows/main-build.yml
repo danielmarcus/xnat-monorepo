@@ -85,14 +85,21 @@ jobs:
           echo "name=${ARTIFACT_NAME}"  >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # 6. Upload WAR artifact (retained 30 days — long enough for deploy jobs)
+      # 6. Upload WAR artifact.
+      #
+      # The WAR is ~232 MB. Each main push uploaded one and retained it for
+      # 30 days, which exhausted the personal-account artifact quota in a
+      # few weeks. Retention is now 7 days — the downstream workflow_run
+      # jobs (smoke-test, cloud-deploy) consume the artifact within minutes;
+      # the WAR is also published to Artifactory in step 7 below if anyone
+      # needs to roll back beyond the 7-day window.
       # -----------------------------------------------------------------------
       - name: Upload WAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.artifact-meta.outputs.name }}
           path: apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war
-          retention-days: 30
+          retention-days: 7
           if-no-files-found: error
 
       # -----------------------------------------------------------------------
@@ -146,4 +153,5 @@ jobs:
         with:
           name: build-info
           path: /tmp/build-info/build-info.env
-          retention-days: 30
+          # Tracks the WAR artifact's lifespan — same 7-day retention.
+          retention-days: 7
