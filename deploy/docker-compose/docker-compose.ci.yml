@@ -31,9 +31,16 @@ services:
         -Xss512k
         -Dxnat.home=/data/xnat/home
         -Dxnat.config=/data/xnat/home/config/xnat-conf.properties
-    # In CI the WAR is staged by the build step; no persistent volumes
+    # In CI the WAR is staged by the build step; no persistent volumes.
+    # Mount it at /opt/xnat-input/ROOT.war (same path as the base file)
+    # so the jakarta-migrate-and-start entrypoint can rewrite javax.* ->
+    # jakarta.* into webapps/. Pre-Phase-C.1 this file mounted the WAR
+    # directly at /usr/local/tomcat/webapps/ROOT.war:ro, but that put a
+    # read-only volume at the destination the entrypoint tries to
+    # `mv` the migrated WAR into, producing an infinite crash-restart
+    # loop ("mv: cannot move ...: Device or resource busy").
     volumes:
-      - ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war:/usr/local/tomcat/webapps/ROOT.war:ro
+      - ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war:/opt/xnat-input/ROOT.war:ro
       - ./xnat-conf/xnat-conf.properties:/data/xnat/home/config/xnat-conf.properties:ro
       - type: tmpfs
         target: /data/xnat/archive
@@ -41,15 +48,18 @@ services:
         target: /data/xnat/build
       - type: tmpfs
         target: /data/xnat/cache
-    # Faster healthcheck so CI pipelines fail (or pass) sooner
+    # Probe /xapi/siteConfig/buildInfo (the unauth endpoint discovered
+    # in Phase A — /xapi/siteConfig requires admin auth and would never
+    # return 200 to wget --spider). start_period bumped 60s -> 180s to
+    # cover the Phase C.1 ~38s on-boot migration step.
     healthcheck:
       test:
         - "CMD-SHELL"
         - >
           wget --quiet --spider --server-response
-          http://localhost:8080/xapi/siteConfig 2>&1
+          http://localhost:8080/xapi/siteConfig/buildInfo 2>&1
           | grep -q '200 OK'
       interval: 10s
       timeout: 5s
       retries: 30
-      start_period: 60s
+      start_period: 180s
