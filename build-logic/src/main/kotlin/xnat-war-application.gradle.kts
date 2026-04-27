@@ -68,6 +68,25 @@ tasks.withType<Javadoc>().configureEach {
 // ---------------------------------------------------------------------------
 
 tasks.named<War>("war") {
+    // Defensive cleanup at configuration time: if the destination
+    // archiveFile is a directory rather than a file, Gradle rejects the
+    // task during task-graph validation BEFORE doFirst runs:
+    //   "Cannot write a file to a location pointing at a directory."
+    // and the user is left wondering what to do. The directory shape
+    // typically comes from Docker bind-mount stub-creation when the
+    // host file didn't exist at compose-up time (the docker-compose
+    // files now use create_host_path: false to prevent NEW occurrences,
+    // but existing checkouts may already have one). Detect at configure
+    // time and recursively delete — the war task is going to overwrite
+    // this path with the freshly built WAR anyway.
+    run {
+        val out = archiveFile.get().asFile
+        if (out.isDirectory) {
+            logger.warn("Removing phantom directory at WAR output path: ${out.absolutePath}")
+            out.deleteRecursively()
+        }
+    }
+
     // Exclude Tomcat's servlet API from WEB-INF/lib – the container provides it.
     classpath(
         configurations["runtimeClasspath"].filter { file ->

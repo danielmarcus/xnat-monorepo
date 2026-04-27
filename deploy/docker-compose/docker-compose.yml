@@ -52,11 +52,29 @@ services:
         -Dxnat.home=/data/xnat/home
         -Dxnat.config=/data/xnat/home/config/xnat-conf.properties
     volumes:
-      # Deploy the locally built WAR. Phase C.1: mount under /opt/xnat-input/
-      # so the jakarta-migrate-and-start entrypoint can rewrite javax.* ->
-      # jakarta.* before placing it under webapps/ROOT.war (Tomcat 10 won't
-      # accept the WAR directly because it was compiled against javax).
-      - ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war:/opt/xnat-input/ROOT.war:ro
+      # Deploy the locally built WAR. Long-form bind mount with
+      # bind.create_host_path: false makes Docker refuse to start the
+      # container when the WAR doesn't exist on the host, instead of
+      # silently creating a stub directory at the source path.
+      #
+      # The stub-dir behaviour was a recurring papercut: running
+      # `docker compose up` before `./gradlew :apps:web:war` made Docker
+      # create
+      #   apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war/  (directory)
+      # which then made every subsequent `./gradlew :apps:web:war` fail
+      # ("cannot write file to existing directory"). With this flag,
+      # `docker compose up` fails early with a clear error
+      # ("bind source path does not exist"), keeping the host tree clean.
+      #
+      # Phase C.1: target /opt/xnat-input/ROOT.war is the staging path
+      # the jakarta-migrate-and-start entrypoint reads; it writes the
+      # migrated jakarta-typed copy into webapps/.
+      - type: bind
+        source: ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war
+        target: /opt/xnat-input/ROOT.war
+        read_only: true
+        bind:
+          create_host_path: false
       # XNAT configuration (overrides the build-time generated config)
       - ./xnat-conf/xnat-conf.properties:/data/xnat/home/config/xnat-conf.properties:ro
       # Persistent archive storage
