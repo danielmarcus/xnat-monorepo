@@ -111,6 +111,22 @@ echo ""
 info "Step 1/5 — Verifying SSH connectivity to ${HOST}..."
 remote 'echo "SSH OK — $(uname -n)"' || die "Cannot reach ${HOST} via SSH.  Check the host, key, and security group."
 success "SSH connection established."
+
+# Block until cloud-init's first-boot config is done. The Terraform user-data
+# (deploy/cloud/terraform/user_data.sh.tpl) runs `dnf install docker`, then
+# downloads the docker-compose plugin from GitHub. SSH on Amazon Linux 2023
+# is reachable within seconds, but user-data can take 60-120s. Without this
+# wait, deploy.sh races into Step 4's `docker compose up` before the plugin
+# binary exists, which manifests as a confusing
+# `unknown shorthand flag: 'f' in -f` (Docker doesn't find the `compose`
+# subcommand and treats `-f` as a top-level docker flag).
+info "Waiting for cloud-init to finish on ${HOST}..."
+remote 'command -v cloud-init >/dev/null 2>&1 || exit 0; sudo cloud-init status --wait' \
+  || die "cloud-init did not complete cleanly on ${HOST}.  Run 'cloud-init status' over SSH for details."
+# Defence-in-depth: prove the plugin is actually callable before we use it.
+remote 'docker compose version >/dev/null 2>&1' \
+  || die "docker compose plugin still not available on ${HOST} after cloud-init wait.  Inspect /var/log/xnat-bootstrap.log over SSH."
+success "cloud-init done; docker compose available."
 echo ""
 
 # ---- Step 2: Copy the WAR to the EC2 instance --------------------------------
