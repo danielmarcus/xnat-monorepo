@@ -40,7 +40,16 @@ services:
     # `mv` the migrated WAR into, producing an infinite crash-restart
     # loop ("mv: cannot move ...: Device or resource busy").
     volumes:
-      - ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war:/opt/xnat-input/ROOT.war:ro
+      # Long-form bind mount + bind.create_host_path: false matches the
+      # base docker-compose.yml — see that file for the rationale
+      # (refuse to start when the WAR is missing instead of silently
+      # creating a stub directory at the host path).
+      - type: bind
+        source: ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war
+        target: /opt/xnat-input/ROOT.war
+        read_only: true
+        bind:
+          create_host_path: false
       - ./xnat-conf/xnat-conf.properties:/data/xnat/home/config/xnat-conf.properties:ro
       - type: tmpfs
         target: /data/xnat/archive
