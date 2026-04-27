@@ -1,30 +1,36 @@
 /*
  * xnat-api: org.nrg.xnat.utils.CatalogUtils
- * Compile-time facade for the real CatalogUtils in apps/web.
- * At runtime, apps/web's version (WEB-INF/classes) takes precedence.
  *
- * Uses Object/unchecked generics where the real types live in xnat-data-models.
+ * Compile-time facade for the real CatalogUtils in apps/web. At runtime
+ * apps/web's WEB-INF/classes version is the only one on the classpath
+ * (xnat-api JAR excludes this class).
+ *
+ * Method, field, and constructor signatures called from xnat-data-models
+ * MUST match the apps/web impl exactly — otherwise xnat-data-models
+ * bakes mismatched bytecode descriptors that the runtime impl does not
+ * declare, and the JVM throws NoSuchMethodError or NoSuchFieldError.
+ *
+ * Typed-stub interfaces / classes (XnatResourcecatalogI,
+ * XnatImagescandataI, CatCatalogI, CatEntryI, CatCatalogBean,
+ * XnatResourcecatalog) live in the xnat-api `stubs` sourceSet and are
+ * NOT exposed to downstream consumers. The runtime versions come from
+ * xnat-data-models codegen and apps/web. See ADR 0008.
  */
 package org.nrg.xnat.utils;
 
 import org.nrg.action.ServerException;
+import org.nrg.xdat.bean.CatCatalogBean;
+import org.nrg.xdat.model.CatCatalogI;
+import org.nrg.xdat.model.CatEntryI;
+import org.nrg.xdat.model.XnatResourcecatalogI;
+import org.nrg.xdat.om.XnatResourcecatalog;
 import org.nrg.xft.event.EventMetaI;
 import org.nrg.xft.security.UserI;
+import org.nrg.xnat.turbine.utils.ArchivableItem;
 
 import javax.annotation.Nullable;
 import java.io.File;
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
 
-/**
- * Facade with correct method signatures for compile-time resolution.
- * The real implementation lives in apps/web and is used at runtime.
- *
- * Methods that return xnat-data-models types (CatCatalogBean, XnatResourcecatalog, etc.)
- * use unchecked generics to avoid the circular dependency.
- */
-@SuppressWarnings({"unchecked", "rawtypes"})
 public class CatalogUtils {
 
     public static final String PROJECT_PATH  = "projectPath";
@@ -36,27 +42,18 @@ public class CatalogUtils {
     // Inner classes
     // -------------------------------------------------------------------------
 
-    /**
-     * Stub for the real CatalogData inner class.
-     * catBean is typed as CatBeanProxy to avoid referencing CatCatalogBean directly.
-     */
     public static class CatalogData {
-        /** The catalog XML file on disk. */
         public File catFile;
-        /** Parent directory of catFile. */
+        public String catFileChecksum = null;
         public String catPath;
-        /** The project id associated with this catalog. */
+        public CatCatalogBean catBean;
         public String project;
-        /**
-         * The catalog bean. Typed as CatBeanProxy to provide getEntries_entry().
-         * At runtime the real CatCatalogBean instance is used.
-         */
-        public CatBeanProxy catBean;
 
-        public CatalogData(Object catBean, File catFile, String project, String catFileChecksum) {
-            this.catBean = new CatBeanProxy(catBean);
+        public CatalogData(CatCatalogBean catBean, File catFile, String project, String catFileChecksum) {
+            this.catBean = catBean;
             this.catFile = catFile;
             this.project = project;
+            this.catFileChecksum = catFileChecksum;
             this.catPath = catFile != null ? catFile.getParent() : null;
         }
 
@@ -66,62 +63,39 @@ public class CatalogUtils {
             this.catPath = catFile != null ? catFile.getParent() : null;
         }
 
-        public CatalogData(File catFile, Object catRes, String project) throws ServerException {
+        public CatalogData(File catFile, XnatResourcecatalog catRes, String project) throws ServerException {
             this.catFile = catFile;
             this.project = project;
             this.catPath = catFile != null ? catFile.getParent() : null;
         }
 
-        public CatalogData(File catFile, Object catRes, String project, String catId) throws ServerException {
+        public CatalogData(File catFile, XnatResourcecatalog catRes, String project, String catId) throws ServerException {
             this(catFile, catRes, project);
         }
 
-        public CatalogData(File catFile, Object catRes, String project, String catId, boolean create) throws ServerException {
+        public CatalogData(File catFile, XnatResourcecatalog catRes, String project, String catId, boolean create) throws ServerException {
             this(catFile, catRes, project);
         }
 
-        public static CatalogData getOrCreate(String rootPath, Object resource, String project)
+        public static CatalogData getOrCreate(String rootPath, XnatResourcecatalogI resource, String project)
                 throws ServerException { return null; }
 
-        public static CatalogData getOrCreate(Object item, Object resource)
+        public static CatalogData getOrCreate(ArchivableItem item, XnatResourcecatalogI resource)
                 throws ServerException { return null; }
 
-        public static CatalogData getOrCreateAndClean(String rootPath, Object resource, boolean includeFullPaths, String project)
+        public static CatalogData getOrCreateAndClean(String rootPath, XnatResourcecatalogI resource, boolean includeFullPaths, String project)
                 throws ServerException { return null; }
 
-        public static CatalogData getOrCreateAndClean(String rootPath, Object resource, boolean includeFullPaths,
+        public static CatalogData getOrCreateAndClean(String rootPath, XnatResourcecatalogI resource, boolean includeFullPaths,
                                                       String project, UserI user, EventMetaI c)
                 throws ServerException { return null; }
-    }
-
-    /**
-     * Proxy for the catalog bean that exposes getEntries_entry() without
-     * referencing CatCatalogBean or CatCatalogI.
-     */
-    @SuppressWarnings("unchecked")
-    public static class CatBeanProxy {
-        private final Object delegate;
-
-        public CatBeanProxy(Object delegate) {
-            this.delegate = delegate;
-        }
-
-        @SuppressWarnings("unchecked")
-        public <A> List<A> getEntries_entry() {
-            if (delegate == null) return Collections.emptyList();
-            try {
-                return (List<A>) delegate.getClass().getMethod("getEntries_entry").invoke(delegate);
-            } catch (Exception e) {
-                return Collections.emptyList();
-            }
-        }
     }
 
     public static class Stats {
         public int count;
         public long size;
 
-        public Stats(Object cat, String parentPath, String project) {
+        public Stats(CatCatalogI cat, String parentPath, String project) {
             count = 0;
             size = 0;
         }
@@ -131,39 +105,40 @@ public class CatalogUtils {
     // Static methods
     // -------------------------------------------------------------------------
 
-    public static File getFile(Object entry, String catPath, String project) { return null; }
+    public static File getFile(CatEntryI entry, String catPath, String project) { return null; }
 
-    public static File getCatalogFile(String rootPath, Object resource) { return null; }
+    public static File getFile(CatEntryI entry, String parentPath, @Nullable String project, @Nullable String destParentPath) { return null; }
 
-    public static File getCatalogFile(String project, String rootPath, Object resource) { return null; }
+    public static File getCatalogFile(String rootPath, XnatResourcecatalogI resource) { return null; }
 
-    /** Returns CatCatalogBean at runtime; uses unchecked generic to avoid circular dep. */
-    @SuppressWarnings("unchecked")
-    public static <T> T getCatalog(String rootPath, Object resource, String project) { return null; }
+    public static File getCatalogFile(String project, String rootPath, XnatResourcecatalogI resource) { return null; }
 
-    @SuppressWarnings("unchecked")
-    public static <T> T getCatalog(File catalogFile, String project) { return null; }
+    public static CatCatalogBean getCatalog(String rootPath, XnatResourcecatalogI resource, String project) { return null; }
 
-    public static String getCatalogProject(Object bean) { return null; }
+    public static CatCatalogBean getCatalog(File catalogFile, String project) { return null; }
 
-    public static boolean setCatalogProject(Object bean, String project) { return false; }
+    public static String getCatalogProject(CatCatalogBean bean) { return null; }
 
-    @SuppressWarnings("unchecked")
-    public static <T> T getCleanCatalog(String project, String rootPath, Object resource,
-                                        boolean includeFullPaths) { return null; }
+    public static boolean setCatalogProject(CatCatalogBean bean, String project) { return false; }
 
-    @SuppressWarnings("unchecked")
-    public static <T> T getCleanCatalog(String project, String rootPath, Object resource,
-                                        boolean includeFullPaths, Object user, Object c) { return null; }
+    public static CatCatalogBean getCleanCatalog(String project, String rootPath, XnatResourcecatalogI resource,
+                                                 boolean includeFullPaths) { return null; }
 
-    public static boolean formalizeCatalog(Object cat, String catPath, String project,
-                                           Object user, Object now) { return false; }
+    public static CatCatalogBean getCleanCatalog(String project, String rootPath, XnatResourcecatalogI resource,
+                                                 boolean includeFullPaths, UserI user, EventMetaI c) { return null; }
+
+    public static boolean formalizeCatalog(CatCatalogI cat, String catPath, String project,
+                                           UserI user, EventMetaI now) { return false; }
+
+    public static boolean formalizeCatalog(CatCatalogI cat, String catPath, String project,
+                                           UserI user, EventMetaI now,
+                                           boolean createChecksums, boolean removeMissingFiles) { return false; }
 
     public static void writeCatalogToFile(CatalogData catalogData) throws Exception {}
 
     public static Boolean maintainFileHistory() { return false; }
 
-    public static Stats getFileStats(Object cat, String parentPath, String project) { return null; }
+    public static Stats getFileStats(CatCatalogI cat, String parentPath, String project) { return null; }
 
     public static String formatSize(long size) { return null; }
 
@@ -171,7 +146,7 @@ public class CatalogUtils {
 
     public static File getFileOnLocalFileSystem(String fullPath) { return null; }
 
-    public static File getFileOnLocalFileSystem(Object entry, String catPath, String project) { return null; }
+    public static File getFileOnLocalFileSystem(String uri, @Nullable String destPath, @Nullable String project) { return null; }
 
-    public static boolean deleteRemoteFile(Object entry, String project) { return false; }
+    public static boolean deleteRemoteFile(@Nullable String url, @Nullable String project) { return false; }
 }

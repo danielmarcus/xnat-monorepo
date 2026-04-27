@@ -34,20 +34,6 @@ import requests
 pytestmark = [pytest.mark.dicom, pytest.mark.slow]
 
 
-# Same root cause as test_resources.py — the xnat-api stubs vs apps/web
-# real-impl signature mismatch on CatalogUtils$CatalogData.getOrCreate.
-# In the DICOM pipeline this fires on POST /data/services/archive (the
-# session-builder calls into the catalog code path). We detect it via
-# the response body and convert to pytest.xfail so dependent tests show
-# as XFAIL not ERROR; pytest will surface XPASS once the bug is fixed.
-_CATALOG_BUG_SIGNATURE = "CatalogUtils$CatalogData.getOrCreate"
-_CATALOG_BUG_REASON = (
-    "Known monorepo bug: NoSuchMethodError on "
-    "CatalogUtils$CatalogData.getOrCreate(String, Object, String) — "
-    "see test_resources.py module docstring."
-)
-
-
 # ---------------------------------------------------------------------------
 # Module-scoped scaffolding: one project, one upload, one archive, all reused
 # ---------------------------------------------------------------------------
@@ -167,21 +153,20 @@ def archived_experiment(
         data={"src": uploaded_prearchive_url},
         timeout=180,
     )
-    if (
-        archive.status_code == 500
-        and _CATALOG_BUG_SIGNATURE in archive.text
-    ):
-        pytest.xfail(_CATALOG_BUG_REASON)
     assert archive.status_code in (200, 201), (
         f"Archive commit failed: HTTP {archive.status_code}. "
         f"Body: {archive.text[:500]}"
     )
 
     # The session shows up asynchronously in /data/projects/{p}/experiments.
+    # XNAT's listing endpoint omits subject_ID unless explicitly requested via
+    # `columns=` — we include it so the assertions below have what they need.
+    listing_params = {"format": "json", "columns": "ID,label,subject_ID"}
+
     def _session_listed() -> bool:
         listing = admin_session.get(
             f"{base_url}/data/projects/{dicom_project}/experiments",
-            params={"format": "json"},
+            params=listing_params,
             timeout=30,
         )
         if listing.status_code != 200:
@@ -196,7 +181,7 @@ def archived_experiment(
 
     listing = admin_session.get(
         f"{base_url}/data/projects/{dicom_project}/experiments",
-        params={"format": "json"},
+        params=listing_params,
         timeout=30,
     )
     results = listing.json().get("ResultSet", {}).get("Result", [])
