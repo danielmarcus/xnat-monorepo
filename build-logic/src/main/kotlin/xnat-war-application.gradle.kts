@@ -151,6 +151,10 @@ dependencies {
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 
+    // Match xnat-java-library.gradle.kts — see that file for the
+    // ConfigPlatformTests.testLargeConfigFile OOM rationale.
+    maxHeapSize = "2g"
+
     systemProperty("file.encoding", "UTF-8")
 
     // Java 21 strong encapsulation workarounds for reflection-heavy frameworks.

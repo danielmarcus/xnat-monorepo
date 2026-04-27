@@ -38,6 +38,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history so Gradle's up-to-date checks work
+          # The DICOM test fixtures under libs/{test,dicom-edit6,dicomtools,
+          # dicom-xnat,dicom-edit4}/src/test/resources/**/*.dcm are tracked
+          # in Git LFS (see .gitattributes). Without lfs: true, actions/checkout
+          # leaves them as pointer-stub files (a few hundred bytes each)
+          # instead of the real DICOM bytes. dcm4che then refuses to parse
+          # them with `DicomStreamException: Not a DICOM Stream`, taking
+          # down ~50 tests across libs/dicom-edit6, libs/dicomtools,
+          # libs/dicom-xnat-mx, libs/dicom-edit4, and apps/web.
+          lfs: true
 
       # -----------------------------------------------------------------------
       # 2. Java 21 (Temurin) setup
