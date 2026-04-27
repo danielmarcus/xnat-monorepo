@@ -287,7 +287,13 @@ jobs:
           XNAT_HOST: http://${{ steps.tf-outputs.outputs.instance_ip }}
           XNAT_PORT: "80"
           XNAT_ADMIN_USER: admin
-          XNAT_ADMIN_PASS: ${{ secrets.XNAT_CLOUD_ADMIN_PASS }}
+          # Fall back to "admin" when XNAT_CLOUD_ADMIN_PASS is unset — the deployed
+          # docker-compose.yml does NOT thread the Terraform xnat_admin_password var
+          # into the running stack (only the unused minimal compose in user_data.sh.tpl
+          # references it), so the live XNAT keeps the WAR's default admin/admin
+          # credentials. With an empty XNAT_ADMIN_PASS env, conftest sends an empty
+          # password to /data/services/auth and every test fails on session login.
+          XNAT_ADMIN_PASS: ${{ secrets.XNAT_CLOUD_ADMIN_PASS || 'admin' }}
 
       # Full suite (DICOM + slow): post-deploy validation, only runs when
       # the fast suite proved the deploy is fundamentally healthy.
@@ -304,7 +310,7 @@ jobs:
           XNAT_HOST: http://${{ steps.tf-outputs.outputs.instance_ip }}
           XNAT_PORT: "80"
           XNAT_ADMIN_USER: admin
-          XNAT_ADMIN_PASS: ${{ secrets.XNAT_CLOUD_ADMIN_PASS }}
+          XNAT_ADMIN_PASS: ${{ secrets.XNAT_CLOUD_ADMIN_PASS || 'admin' }}
 
       # -----------------------------------------------------------------------
       # 9. Upload smoke-test results
