@@ -113,6 +113,19 @@ tasks.named<Jar>("jar") {
 }
 
 // ---------------------------------------------------------------------------
+// Test classpath shared with every module — see xnat-java-library.gradle.kts
+// for rationale.  Spring Test bootstrap loads WebDelegatingSmartContextLoader
+// which needs javax.servlet.ServletContext on the test runtime classpath.
+// ---------------------------------------------------------------------------
+
+dependencies {
+    "testRuntimeOnly"("javax.servlet:javax.servlet-api:3.1.0")
+    // See xnat-java-library.gradle.kts for rationale.
+    "testRuntimeOnly"("org.junit.vintage:junit-vintage-engine:5.8.1")
+    "testRuntimeOnly"("org.junit.jupiter:junit-jupiter-engine:5.8.1")
+}
+
+// ---------------------------------------------------------------------------
 // Test configuration
 // ---------------------------------------------------------------------------
 

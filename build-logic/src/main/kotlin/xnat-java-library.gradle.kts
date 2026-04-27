@@ -74,6 +74,34 @@ tasks.withType<Javadoc>().configureEach {
 }
 
 // ---------------------------------------------------------------------------
+// Test classpath additions shared by every library module
+//
+// Spring Test's WebDelegatingSmartContextLoader is on the runtime classpath
+// of every Spring-based test context (it's chosen at startup even when no
+// @WebAppConfiguration is present). It needs javax.servlet.ServletContext
+// to load. Modules that declare `compileOnly(libs.javax.servlet.api)` for
+// their main sources still don't have it on the test runtime classpath,
+// which produces NoClassDefFoundError at test-context bootstrap.
+//
+// Adding the servlet API at testRuntimeOnly here means every module gets
+// the runtime jar without having to repeat the declaration. It costs ~200KB
+// of memory in the test JVM and zero compile-time impact.
+// ---------------------------------------------------------------------------
+
+dependencies {
+    "testRuntimeOnly"("javax.servlet:javax.servlet-api:3.1.0")
+    // Many modules declare only junit4 on testImplementation. The convention
+    // plugin's useJUnitPlatform() requires a Platform engine on the runtime
+    // classpath; without one the test JVM aborts with
+    //   PreconditionViolationException: Cannot create Launcher without at
+    //   least one TestEngine; consider adding an engine implementation JAR
+    // junit-vintage-engine bridges JUnit 4 onto Platform; jupiter-engine
+    // covers @Test (JUnit 5) modules. Both are safe to declare in parallel.
+    "testRuntimeOnly"("org.junit.vintage:junit-vintage-engine:5.8.1")
+    "testRuntimeOnly"("org.junit.jupiter:junit-jupiter-engine:5.8.1")
+}
+
+// ---------------------------------------------------------------------------
 // Test configuration
 // ---------------------------------------------------------------------------
 
