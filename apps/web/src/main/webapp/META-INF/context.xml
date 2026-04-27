@@ -10,6 +10,22 @@
 
 <Context>
     <!--
+    Phase C.1 — Tomcat 10 / Jakarta EE migration via deploy-time WAR rewriter.
+
+    XNAT's WAR is built against javax.* (Spring 5.3.x, Hibernate 5.6.x,
+    Restlet 1.1.10). To run on Tomcat 10's jakarta-only Servlet API, the
+    WAR is rewritten using Apache's `jakartaee-migration` tool BEFORE
+    Tomcat sees it. The tool ships at /usr/local/tomcat/lib/ in the
+    tomcat:10.1 base image, but it's a build/deploy-time tool — there is
+    no runtime Listener class in 1.0.10. The Dockerfile entrypoint in
+    deploy/docker-compose/xnat/ runs it against the mounted/baked WAR on
+    container start, so the WAR Tomcat loads is fully Jakarta-typed.
+
+    Source-level migration to jakarta (and the Spring 6 / Hibernate 6
+    bumps) is deferred to Phase C.2 in docs/plan-tomcat10-eks-tests.md.
+    -->
+
+    <!--
     For Tomcat 7 compatibility, uncomment the <Loader> element and comment out the <Resources>
     and <CookieProcessor> elements under that.
     -->

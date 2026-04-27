@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "xnat.fullname" . }}-archive
+  labels:
+    {{- include "xnat.labels" . | nindent 4 }}
+    app.kubernetes.io/component: archive
+spec:
+  accessModes:
+    - {{ .Values.persistence.archive.accessMode }}
+  storageClassName: {{ .Values.persistence.archive.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.archive.size }}

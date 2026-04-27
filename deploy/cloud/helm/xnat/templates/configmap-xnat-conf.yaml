@@ -1,0 +1,28 @@
+{{/*
+xnat-conf.properties — the file XNAT reads at startup (mounted at
+/data/xnat/home/config/xnat-conf.properties). Contains the JDBC URL plus
+a small handful of overrides. The DB password is NOT in here — it's read
+from the secret-mounted env var XNAT_DATASOURCE_PASSWORD which the
+deployment template references in the JDBC URL via env-substitution.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "xnat.fullname" . }}-xnat-conf
+  labels:
+    {{- include "xnat.labels" . | nindent 4 }}
+data:
+  xnat-conf.properties: |
+    # ----- Database -----
+    xnat.datasource.driver=org.postgresql.Driver
+    xnat.datasource.url=jdbc:postgresql://{{ include "xnat.databaseHost" . }}:{{ .Values.database.port }}/{{ .Values.database.name }}
+    xnat.datasource.username={{ .Values.database.username }}
+    # password is set at runtime via XNAT_DATASOURCE_PASSWORD env var
+
+    # ----- Hibernate -----
+    hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+    hibernate.hbm2ddl.auto=update
+    hibernate.show_sql=false
+
+    # ----- XNAT runtime -----
+    xnat.home=/data/xnat/home

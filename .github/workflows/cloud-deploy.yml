@@ -263,14 +263,34 @@ jobs:
           if [[ -f smoke-tests/requirements.txt ]]; then
             pip install -r smoke-tests/requirements.txt
           else
-            pip install pytest requests pytest-html
+            pip install pytest requests pytest-html pytest-rerunfailures
           fi
 
-      - name: Run cloud smoke tests
+      # Fast suite gates: if it fails, the full suite is skipped (default
+      # step behavior — second step has no `if: always()`).
+      - name: Run cloud smoke tests (fast)
         run: |
           pytest smoke-tests/ \
-            --junitxml=cloud-smoke-test-results.xml \
-            --html=cloud-smoke-test-report.html \
+            -m "not slow and not container_service" \
+            --reruns 2 \
+            --junitxml=cloud-smoke-results-fast.xml \
+            --html=cloud-smoke-report-fast.html \
+            --self-contained-html \
+            -v
+        env:
+          XNAT_BASE_URL: http://${{ steps.tf-outputs.outputs.instance_ip }}/xnat
+          XNAT_USER: admin
+          XNAT_PASS: ${{ secrets.XNAT_CLOUD_ADMIN_PASS }}
+
+      # Full suite (DICOM + slow): post-deploy validation, only runs when
+      # the fast suite proved the deploy is fundamentally healthy.
+      - name: Run cloud smoke tests (full)
+        run: |
+          pytest smoke-tests/ \
+            -m "slow or dicom" \
+            --reruns 2 \
+            --junitxml=cloud-smoke-results-full.xml \
+            --html=cloud-smoke-report-full.html \
             --self-contained-html \
             -v
         env:
@@ -287,8 +307,10 @@ jobs:
         with:
           name: cloud-smoke-test-results-${{ env.GIT_SHA_SHORT }}
           path: |
-            cloud-smoke-test-results.xml
-            cloud-smoke-test-report.html
+            cloud-smoke-results-fast.xml
+            cloud-smoke-results-full.xml
+            cloud-smoke-report-fast.html
+            cloud-smoke-report-full.html
           retention-days: 30
 
       # NOTE: The cloud environment is NOT torn down — it remains running as a

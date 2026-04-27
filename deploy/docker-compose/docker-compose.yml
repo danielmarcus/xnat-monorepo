@@ -52,8 +52,11 @@ services:
         -Dxnat.home=/data/xnat/home
         -Dxnat.config=/data/xnat/home/config/xnat-conf.properties
     volumes:
-      # Deploy the locally built WAR as ROOT.war
-      - ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war:/usr/local/tomcat/webapps/ROOT.war:ro
+      # Deploy the locally built WAR. Phase C.1: mount under /opt/xnat-input/
+      # so the jakarta-migrate-and-start entrypoint can rewrite javax.* ->
+      # jakarta.* before placing it under webapps/ROOT.war (Tomcat 10 won't
+      # accept the WAR directly because it was compiled against javax).
+      - ../../apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war:/opt/xnat-input/ROOT.war:ro
       # XNAT configuration (overrides the build-time generated config)
       - ./xnat-conf/xnat-conf.properties:/data/xnat/home/config/xnat-conf.properties:ro
       # Persistent archive storage
@@ -64,16 +67,21 @@ services:
     networks:
       - xnat-network
     healthcheck:
+      # /xapi/siteConfig requires admin auth in this XNAT release (returns 401
+      # to anonymous wget --spider, which is why the previous probe always
+      # reported 'unhealthy'). /xapi/siteConfig/buildInfo is the unauth
+      # endpoint we use for the same purpose in the K8s readiness probe and
+      # the smoke-test fixtures (see Phase A finding).
       test:
         - "CMD-SHELL"
         - >
           wget --quiet --spider --server-response
-          http://localhost:8080/xapi/siteConfig 2>&1
+          http://localhost:8080/xapi/siteConfig/buildInfo 2>&1
           | grep -q '200 OK'
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 120s
+      start_period: 180s
 
 networks:
   xnat-network:

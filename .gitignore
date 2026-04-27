@@ -134,3 +134,26 @@ generated-src/
 test-results/
 coverage/
 *.exec
+
+# ----------------------------------------------------------------------------
+# Terraform / OpenTofu
+# ----------------------------------------------------------------------------
+# Per-init cache: provider binaries, modules, backend state — never commit.
+.terraform/
+# Local plan artefacts
+*.tfplan
+tfplan
+# Generated user-data preview from local_file resource (deploy/cloud/terraform)
+.rendered_user_data.sh
+# Backend config files often hold S3 paths only, but they're per-environment
+# and not source-of-truth — ignore by default; commit a .example variant if
+# documenting expected fields is useful.
+*backend.conf
+# Terraform crash logs
+crash.log
+crash.*.log
+# Override files (intentional, but not committed)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

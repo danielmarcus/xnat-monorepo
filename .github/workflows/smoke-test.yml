@@ -5,6 +5,12 @@
 # Docker Compose stack, waits for XNAT to become ready, then runs the
 # Python/pytest smoke-test suite.
 #
+# Two matrix variants:
+#   fast — `not slow and not container_service`, gates the deploy.
+#   full — `slow or dicom`, validates the long-tail (DICOM upload, search).
+# Each variant spins up its own Compose stack so failures in one suite
+# can't cross-contaminate the other.
+#
 # On failure the job captures all container logs and uploads them alongside
 # the pytest JUnit XML report so failures can be diagnosed without re-running.
 #
@@ -31,11 +37,24 @@ permissions:
 
 jobs:
   smoke-test:
-    name: Docker Compose Smoke Tests
+    name: ${{ matrix.suite.name }} smoke tests
     # Only run when the upstream build succeeded.
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: ${{ matrix.suite.timeout }}
+
+    strategy:
+      # Don't cancel the full suite when fast fails or vice versa — the
+      # diagnostic value of seeing both runs is worth the runner minutes.
+      fail-fast: false
+      matrix:
+        suite:
+          - name: fast
+            marker: "not slow and not container_service"
+            timeout: 30
+          - name: full
+            marker: "slow or dicom"
+            timeout: 60
 
     steps:
       # -----------------------------------------------------------------------
@@ -144,17 +163,19 @@ jobs:
           if [[ -f smoke-tests/requirements.txt ]]; then
             pip install -r smoke-tests/requirements.txt
           else
-            pip install pytest requests pytest-html
+            pip install pytest requests pytest-html pytest-rerunfailures
           fi
 
       # -----------------------------------------------------------------------
-      # 7. Run smoke tests
+      # 7. Run smoke tests for this matrix variant
       # -----------------------------------------------------------------------
-      - name: Run smoke tests
+      - name: Run smoke tests (${{ matrix.suite.name }})
         run: |
           pytest smoke-tests/ \
-            --junitxml=smoke-test-results.xml \
-            --html=smoke-test-report.html \
+            -m "${{ matrix.suite.marker }}" \
+            --reruns 2 \
+            --junitxml=smoke-test-results-${{ matrix.suite.name }}.xml \
+            --html=smoke-test-report-${{ matrix.suite.name }}.html \
             --self-contained-html \
             -v
         env:
@@ -170,9 +191,9 @@ jobs:
         continue-on-error: true
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          files: smoke-test-results.xml
-          check_name: 'Smoke Test Results'
-          comment_title: 'Smoke Test Results'
+          files: smoke-test-results-${{ matrix.suite.name }}.xml
+          check_name: 'Smoke Test Results (${{ matrix.suite.name }})'
+          comment_title: 'Smoke Test Results (${{ matrix.suite.name }})'
 
       # -----------------------------------------------------------------------
       # 9. On failure: capture container logs + upload diagnostics
@@ -192,7 +213,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: container-logs-${{ env.GIT_SHA_SHORT }}
+          name: container-logs-${{ matrix.suite.name }}-${{ env.GIT_SHA_SHORT }}
           path: /tmp/container-logs/
           retention-days: 7
 
@@ -200,10 +221,10 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-test-report-${{ env.GIT_SHA_SHORT }}
+          name: smoke-test-report-${{ matrix.suite.name }}-${{ env.GIT_SHA_SHORT }}
           path: |
-            smoke-test-results.xml
-            smoke-test-report.html
+            smoke-test-results-${{ matrix.suite.name }}.xml
+            smoke-test-report-${{ matrix.suite.name }}.html
           retention-days: 7
 
       # -----------------------------------------------------------------------

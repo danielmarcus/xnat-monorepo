@@ -1,17 +1,16 @@
 """
-test_smoke.py — XNAT smoke test suite.
+test_smoke.py — XNAT smoke test suite (auth + project/user CRUD).
 
-Tests are ordered (via explicit numeric prefixes) so they run in the sequence
-described in the specification:
+Tests are ordered so they run as a sequence:
 
-  1. Health check        — GET  /xapi/siteConfig
-  2. Admin login         — POST /data/services/auth  (admin creds)
-  3. User creation       — POST /xapi/users  +  GET /xapi/users/{username}
-  4. User login          — POST /data/services/auth  (new user creds)
-  5. Project creation    — PUT  /data/projects/{id}  +  GET confirmation
-  6. Project listing     — GET  /data/projects includes created project
-  7. Cleanup             — DELETE user and project, confirm 200
+  1. Admin login         — POST /data/services/auth  (admin creds)
+  2. User creation       — POST /xapi/users  +  GET /xapi/users/{username}
+  3. User login          — POST /data/services/auth  (new user creds)
+  4. Project creation    — PUT  /data/projects/{id}  +  GET confirmation
+  5. Project listing     — GET  /data/projects includes created project
+  6. Cleanup             — DELETE user and project, confirm 200
 
+Site-config / health-check coverage moved to test_site_config.py.
 All fixtures are provided by conftest.py.
 """
 
@@ -22,24 +21,7 @@ import requests
 
 
 # ---------------------------------------------------------------------------
-# Test 1 — Health check
-# ---------------------------------------------------------------------------
-
-class TestHealthCheck:
-    def test_site_config_returns_200(self, base_url: str, admin_session: Session) -> None:
-        """GET /xapi/siteConfig must return HTTP 200 with admin authentication."""
-        response = admin_session.get(
-            f"{base_url}/xapi/siteConfig",
-            timeout=30,
-        )
-        assert response.status_code == 200, (
-            f"Expected 200 from /xapi/siteConfig, got {response.status_code}. "
-            f"Body: {response.text[:500]}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test 2 — Admin login
+# Test 1 — Admin login
 # ---------------------------------------------------------------------------
 
 class TestAdminLogin:
@@ -70,7 +52,7 @@ class TestAdminLogin:
 
 
 # ---------------------------------------------------------------------------
-# Test 3 — User creation
+# Test 2 — User creation
 # ---------------------------------------------------------------------------
 
 class TestUserCreation:
@@ -120,7 +102,7 @@ class TestUserCreation:
 
 
 # ---------------------------------------------------------------------------
-# Test 4 — User login
+# Test 3 — User login
 # ---------------------------------------------------------------------------
 
 class TestUserLogin:
@@ -144,7 +126,7 @@ class TestUserLogin:
 
 
 # ---------------------------------------------------------------------------
-# Test 5 — Project creation
+# Test 4 — Project creation
 # ---------------------------------------------------------------------------
 
 class TestProjectCreation:
@@ -186,7 +168,7 @@ class TestProjectCreation:
 
 
 # ---------------------------------------------------------------------------
-# Test 6 — Project listing
+# Test 5 — Project listing
 # ---------------------------------------------------------------------------
 
 class TestProjectListing:
@@ -224,7 +206,7 @@ class TestProjectListing:
 
 
 # ---------------------------------------------------------------------------
-# Test 7 — Cleanup
+# Test 6 — Cleanup
 # ---------------------------------------------------------------------------
 
 class TestCleanup:
