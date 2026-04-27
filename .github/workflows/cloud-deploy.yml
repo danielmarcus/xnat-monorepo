@@ -278,9 +278,12 @@ jobs:
             --self-contained-html \
             -v
         env:
-          XNAT_BASE_URL: http://${{ steps.tf-outputs.outputs.instance_ip }}/xnat
-          XNAT_USER: admin
-          XNAT_PASS: ${{ secrets.XNAT_CLOUD_ADMIN_PASS }}
+          # conftest.py reads XNAT_HOST + XNAT_PORT (not XNAT_BASE_URL).
+          # Cloud WAR is served at the /xnat context root, so include it here.
+          XNAT_HOST: http://${{ steps.tf-outputs.outputs.instance_ip }}/xnat
+          XNAT_PORT: "80"
+          XNAT_ADMIN_USER: admin
+          XNAT_ADMIN_PASS: ${{ secrets.XNAT_CLOUD_ADMIN_PASS }}
 
       # Full suite (DICOM + slow): post-deploy validation, only runs when
       # the fast suite proved the deploy is fundamentally healthy.
@@ -294,9 +297,10 @@ jobs:
             --self-contained-html \
             -v
         env:
-          XNAT_BASE_URL: http://${{ steps.tf-outputs.outputs.instance_ip }}/xnat
-          XNAT_USER: admin
-          XNAT_PASS: ${{ secrets.XNAT_CLOUD_ADMIN_PASS }}
+          XNAT_HOST: http://${{ steps.tf-outputs.outputs.instance_ip }}/xnat
+          XNAT_PORT: "80"
+          XNAT_ADMIN_USER: admin
+          XNAT_ADMIN_PASS: ${{ secrets.XNAT_CLOUD_ADMIN_PASS }}
 
       # -----------------------------------------------------------------------
       # 9. Upload smoke-test results
