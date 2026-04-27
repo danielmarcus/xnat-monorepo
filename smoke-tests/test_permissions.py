@@ -49,6 +49,27 @@ def _project_visible_as(
     ).status_code
 
 
+def _project_data_visible_as(
+    user_sess: requests.Session,
+    base_url: str,
+    project: str,
+) -> int:
+    """
+    Status when GETing project DATA (subjects), not the project record.
+
+    XNAT's security boundary lives at the data level, not at the project
+    metadata level: any logged-in user can see that a project exists
+    (200 on /data/projects/{p}), but only members and above can read
+    its subjects/experiments. Permission tests must assert against the
+    data endpoint, not the metadata endpoint.
+    """
+    return user_sess.get(
+        f"{base_url}/data/projects/{project}/subjects",
+        params={"format": "json"},
+        timeout=30,
+    ).status_code
+
+
 # ---------------------------------------------------------------------------
 # Membership operations
 # ---------------------------------------------------------------------------
@@ -104,22 +125,27 @@ class TestMemberCanRead:
 
 
 class TestNonMemberCannotRead:
-    def test_nonmember_cannot_read_private_project(
+    def test_nonmember_cannot_read_private_project_data(
         self,
         base_url: str,
         isolated_project: str,
         user_session,
     ) -> None:
         """
-        With no group membership and project access_level=private (the
-        XNAT default), the user must be denied. Older XNAT releases
-        returned 403; newer ones return 404 (info hiding). Accept both.
+        With no group membership the user must be denied DATA access.
+
+        Empirical: XNAT lets every logged-in user see that a project
+        exists — GET /data/projects/{p} returns 200 with project
+        metadata even for non-members. The actual security boundary is
+        at the data level, so we assert against /subjects (and accept
+        both 403 and 404 across XNAT versions).
         """
-        status = _project_visible_as(
+        status = _project_data_visible_as(
             user_session.session, base_url, isolated_project
         )
         assert status in (403, 404), (
-            f"Non-member should be denied (403/404), got {status}"
+            f"Non-member should be denied data access (403/404), "
+            f"got {status}"
         )
 
 

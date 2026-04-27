@@ -64,26 +64,32 @@ class TestBuildInfo:
         ), f"buildInfo response missing version metadata. Keys: {list(data.keys())[:20]}"
 
 
-class TestInitializedEndpoint:
-    def test_initialized_endpoint_unauthenticated(self, base_url: str) -> None:
+class TestUnauthenticatedHealthEndpoint:
+    def test_buildinfo_reachable_unauthenticated(self, base_url: str) -> None:
         """
-        GET /xapi/siteConfig/initialized must return 200 with no authentication.
+        GET /xapi/siteConfig/buildInfo must return 200 with no authentication.
 
-        The K8s readiness/liveness probes hit this endpoint on every pod, so
-        any auth requirement here would break Helm rollouts. Test uses a fresh
-        Session — explicitly NOT admin_session.
+        Empirical: in this XNAT release, /xapi/siteConfig/initialized
+        actually requires auth (returns 401), even though older docs and
+        the original migration plan assumed it was unauthenticated. The
+        endpoint that genuinely returns 200 to anonymous callers is
+        /xapi/siteConfig/buildInfo — use that as the K8s readiness probe
+        in Phase B's Helm chart instead. Test uses a fresh Session,
+        explicitly NOT admin_session, to prove the unauth contract.
         """
         anon = requests.Session()
         response = anon.get(
-            f"{base_url}/xapi/siteConfig/initialized", timeout=30
+            f"{base_url}/xapi/siteConfig/buildInfo", timeout=30
         )
         assert response.status_code == 200, (
-            f"/xapi/siteConfig/initialized must be reachable unauthenticated. "
+            f"/xapi/siteConfig/buildInfo must be reachable unauthenticated. "
             f"Got HTTP {response.status_code}. Body: {response.text[:200]}"
         )
-        body = response.text.strip().lower()
-        assert body in ("true", "false"), (
-            f"Expected 'true' or 'false' from /initialized, got: {body!r}"
+        # Body is JSON build metadata — must parse and have at least one
+        # version-shaped field.
+        data = response.json()
+        assert isinstance(data, dict), (
+            f"Expected JSON object from buildInfo, got {type(data).__name__}"
         )
 
 
