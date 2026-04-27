@@ -140,7 +140,7 @@ Skip module if `container_service_available` is False.
 - `test_site_config_get` — move from `test_smoke.py`
 - `test_site_config_update_admin_email` — PUT, GET back, restore
 - `test_site_preferences_get` — `GET /xapi/siteConfig/buildInfo`
-- `test_initialized_endpoint_unauth` — `GET /xapi/siteConfig/initialized` works without auth (used by K8s readiness probe in Phase B)
+- `test_buildinfo_unauth` — `GET /xapi/siteConfig/buildInfo` works without auth (used by K8s readiness probe in Phase B). NOTE: original plan named `/xapi/siteConfig/initialized`; empirically that endpoint requires auth in this release, so `/buildInfo` is the actual unauth health endpoint.
 
 ### `smoke-tests/requirements.txt` — extend
 
@@ -311,7 +311,7 @@ inClusterPostgres:
   - Init container: wait for Postgres TCP via `nc -z $DB_HOST 5432`
   - Main container env: `XNAT_DATASOURCE_URL`, `XNAT_DATASOURCE_PASSWORD` from secret
   - Volume mounts: archive PVC at `/data/xnat/archive`, config PVC at `/data/xnat/home`, configmap into `/data/xnat/home/config/xnat-conf.properties`
-  - Readiness probe: `httpGet /xapi/siteConfig/initialized:8080`, initialDelay 60s, period 10s, failureThreshold 30
+  - Readiness probe: `httpGet /xapi/siteConfig/buildInfo:8080`, initialDelay 60s, period 10s, failureThreshold 30
   - Liveness probe: same path, initialDelay 300s (Tomcat warmup), period 30s, failureThreshold 3
 - `xnat-web-service.yaml` — type from values; LoadBalancer assigns ELB hostname automatically (`kubectl get svc xnat-web -o wide`)
 - `xnat-web-ingress.yaml` — conditional on `ingress.enabled`
@@ -365,7 +365,7 @@ Triggered by `workflow_dispatch` and on tags. Steps:
 - [ ] `kubectl get sc` shows `efs-sc` and `gp3`
 - [ ] RDS endpoint reachable from a node: `kubectl run psql --image=postgres:15-alpine --rm -it -- psql -h $RDS_ENDPOINT -U xnat`
 - [ ] `helm install` succeeds; pod Ready within 5 min
-- [ ] ELB hostname resolves; `curl http://$ELB/xapi/siteConfig/initialized` returns 200
+- [ ] ELB hostname resolves; `curl http://$ELB/xapi/siteConfig/buildInfo` returns 200
 - [ ] Full Phase A smoke suite passes against EKS
 - [ ] DICOM upload test passes (canary for EFS + persistence)
 - [ ] Existing `cloud-deploy.yml` still passes — both deploy targets coexist
@@ -454,7 +454,7 @@ FROM tomcat:10.1-jdk21-temurin
 Plus:
 - Remove the `bcpkix-*.jar` `jarsToSkip` patch — Tomcat 10's scanner handles BC differently. Re-add only if startup fails with stack overflow.
 - Audit `JDK_JAVA_OPTIONS` add-opens flags. Tomcat 10 needs fewer. Remove one at a time, keep what's actually needed.
-- Health check path: `/xapi/siteConfig/initialized` (200, no auth).
+- Health check path: `/xapi/siteConfig/buildInfo` (200, no auth).
 
 ### `deploy/docker-compose/xnat/Dockerfile.k8s` — modify
 
@@ -464,7 +464,7 @@ Same Tomcat 10 base. The Phase B EKS path picks this up automatically on next im
 
 ```yaml
 healthcheck:
-  test: ["CMD-SHELL", "wget --quiet --spider http://localhost:8080/xapi/siteConfig/initialized || exit 1"]
+  test: ["CMD-SHELL", "wget --quiet --spider http://localhost:8080/xapi/siteConfig/buildInfo || exit 1"]
 ```
 
 ### Spring config — manual updates
@@ -505,7 +505,7 @@ Schedule OpenRewrite as a separate follow-up branch after Phase C ships and the 
 - [ ] `./gradlew :apps:web:war` produces a WAR
 - [ ] Local Compose stack starts on Tomcat 10: `docker compose up -d`
 - [ ] Container logs show transformer activity (look for `JakartaTransformerListener` startup messages) and no `ClassNotFoundException` / `NoClassDefFoundError`
-- [ ] `/xapi/siteConfig/initialized` returns 200 within 3 minutes of startup (transformer adds ~5–30s to first class load)
+- [ ] `/xapi/siteConfig/buildInfo` returns 200 within 3 minutes of startup (transformer adds ~5–30s to first class load)
 - [ ] **Phase A DICOM upload test passes** — primary canary; if DICOM upload survives, persistence + servlet stack survived
 - [ ] Phase A fast smoke suite passes
 - [ ] Phase B EKS deploy succeeds with the new image (re-run, don't re-Terraform)
