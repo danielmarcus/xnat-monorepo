@@ -14,3 +14,13 @@ pytest-html>=4.1.0
 
 # JUnit XML reporting (built into pytest >= 6, listed for clarity)
 # No separate package needed — pytest --junitxml handles this natively.
+
+# Synthetic DICOM fixture generation for upload tests
+pydicom>=2.4
+
+# Parallel test execution (-n auto) for the fast suite
+pytest-xdist>=3.5
+
+# Retry transient failures (DICOM upload + container service can be flaky
+# under load). Used in CI as `--reruns 2`.
+pytest-rerunfailures>=14.0
