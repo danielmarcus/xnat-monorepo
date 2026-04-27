@@ -1,8 +1,14 @@
 # XNAT Web Application Dockerfile
 # Based on the official NrgXnat/xnat-docker-compose Dockerfile,
 # adapted for Java 21 and runtime WAR mounting (WAR is not baked into image).
+#
+# Phase C.1: bumped from tomcat:9.0-jdk21-temurin to tomcat:10.1-jdk21-temurin.
+# The JakartaTransformerListener (declared in apps/web/.../META-INF/context.xml)
+# rewrites javax.* -> jakarta.* references at class load time, so the same
+# javax-typed WAR runs on Tomcat 10's jakarta-only Servlet API. No source
+# changes needed — that's deferred to Phase C.2.
 
-FROM tomcat:9.0-jdk21-temurin
+FROM tomcat:10.1-jdk21-temurin
 
 LABEL org.opencontainers.image.authors="XNAT Monorepo"
 
@@ -65,7 +71,10 @@ ENV JDK_JAVA_OPTIONS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=ja
 # ----- helper scripts -----
 COPY make-xnat-config.sh /usr/local/bin/make-xnat-config.sh
 COPY wait-for-postgres.sh /usr/local/bin/wait-for-postgres.sh
-RUN chmod +x /usr/local/bin/make-xnat-config.sh /usr/local/bin/wait-for-postgres.sh
+COPY jakarta-migrate-and-start.sh /usr/local/bin/jakarta-migrate-and-start.sh
+RUN chmod +x /usr/local/bin/make-xnat-config.sh \
+             /usr/local/bin/wait-for-postgres.sh \
+             /usr/local/bin/jakarta-migrate-and-start.sh
 
 # ----- generate default xnat-conf.properties at build time -----
 # The config is written to a staging area; at container start the entrypoint
@@ -80,6 +89,8 @@ ENV XNAT_HOME=${XNAT_HOME} \
 
 EXPOSE 8080
 
-# Wait for Postgres to be ready, then start Tomcat.
-# The WAR file is expected to be mounted at runtime as ROOT.war.
-CMD ["wait-for-postgres.sh", "/usr/local/tomcat/bin/catalina.sh", "run"]
+# Phase C.1 entrypoint: rewrite javax.* -> jakarta.* via the bundled
+# jakartaee-migration tool, then chain into wait-for-postgres + Tomcat.
+# The mounted WAR is read from /opt/xnat-input/ROOT.war and the
+# transformed copy is placed at /usr/local/tomcat/webapps/ROOT.war.
+CMD ["jakarta-migrate-and-start.sh"]

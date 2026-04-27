@@ -6,11 +6,14 @@
 # Baking the WAR is required for ECR-pushed K8s deploys — pods can't share
 # a host-mounted volume across nodes.
 #
-# Phase C will bump the base to tomcat:10.1-jdk21-temurin together with
-# enabling the Apache jakartaee-migration listener; until then this stays
-# on Tomcat 9 / javax to keep Phase B independent of the Tomcat 10 work.
+# Phase C.1: bumped to tomcat:10.1-jdk21-temurin together with enabling the
+# Apache jakartaee-migration listener (declared in
+# apps/web/.../META-INF/context.xml). The transformer rewrites
+# javax.* -> jakarta.* at class load time, so the same javax-typed WAR runs
+# unchanged on Tomcat 10's jakarta-only Servlet API. Source-level migration
+# is deferred to Phase C.2.
 
-FROM tomcat:9.0-jdk21-temurin
+FROM tomcat:10.1-jdk21-temurin
 
 LABEL org.opencontainers.image.authors="XNAT Monorepo"
 
@@ -77,7 +80,10 @@ ENV JDK_JAVA_OPTIONS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=ja
 # ----- helper scripts (shared with the sibling Dockerfile) -----
 COPY make-xnat-config.sh /usr/local/bin/make-xnat-config.sh
 COPY wait-for-postgres.sh /usr/local/bin/wait-for-postgres.sh
-RUN chmod +x /usr/local/bin/make-xnat-config.sh /usr/local/bin/wait-for-postgres.sh
+COPY jakarta-migrate-and-start.sh /usr/local/bin/jakarta-migrate-and-start.sh
+RUN chmod +x /usr/local/bin/make-xnat-config.sh \
+             /usr/local/bin/wait-for-postgres.sh \
+             /usr/local/bin/jakarta-migrate-and-start.sh
 
 # ----- generate default xnat-conf.properties at build time -----
 # In the K8s flow this gets overwritten by a ConfigMap-mounted file at
@@ -99,7 +105,9 @@ ENV XNAT_HOME=${XNAT_HOME} \
 
 EXPOSE 8080
 
-# Wait for Postgres to be ready, then start Tomcat. wait-for-postgres.sh
-# is a no-op when reachable so it doubles as the K8s init-container's
+# Phase C.1 entrypoint: rewrite javax.* -> jakarta.* via the bundled
+# jakartaee-migration tool against the baked-in ROOT.war, then chain
+# into wait-for-postgres + Tomcat. wait-for-postgres.sh is a no-op when
+# Postgres is already reachable, so it doubles as the K8s init container's
 # fallback if the chart's separate netcat-based wait ever drifts.
-CMD ["wait-for-postgres.sh", "/usr/local/tomcat/bin/catalina.sh", "run"]
+CMD ["jakarta-migrate-and-start.sh"]

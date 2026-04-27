@@ -384,28 +384,35 @@ The repo's Restlet is **1.1.10**, not the 2.4.x the original plan assumed. There
 
 Instead, use Apache Tomcat's `tomcat-jakartaee-migration` listener to rewrite `javax.*` → `jakarta.*` references at class-load time. The WAR on disk stays `javax.*`; the running classes are `jakarta.*`. This handles Restlet AND XNAT's own 547 `javax.servlet`/`javax.persistence` imports in one mechanism.
 
-OpenRewrite source-level migration becomes a **follow-up cleanup** in a later branch, not a blocker for Tomcat 10.
+## Scope split
 
-## Pre-flight: unblock Spring 6
+Phase C is split into two deliveries:
 
-Spring 6 / Hibernate 6 cannot land while these forced versions are pinned in `apps/web/build.gradle.kts` `resolutionStrategy`:
+- **Phase C.1 — Transformer-only (this branch):** Tomcat 10.1 base image + `JakartaTransformerListener` + `web.xml` schema bump + Dockerfile updates. **No source changes. No Spring/Hibernate version bumps.** Spring 5.3.39, Spring Security 5.7.13, Hibernate 5.6.15, and Restlet 1.1.10 stay exactly as-is — the transformer rewrites their `javax.*` references at class-load time so they run on Tomcat 10. This is the primary deliverable for Phase C.
+- **Phase C.2 — Spring 6 / Hibernate 6 / OpenRewrite (deferred):** Source-level Jakarta migration via OpenRewrite, plus Spring 6.x / Hibernate 6.x / Spring Security 6.x bumps. This is multi-day work involving `WebSecurityConfigurerAdapter` removal, `antMatchers→requestMatchers` rewrites, Hibernate naming-strategy schema audit, and unlocking the forced version pins. Schedule as a separate branch after C.1 ships and the transformer is proven stable.
+
+The "Pre-flight" sections, "Spring config — manual updates", and the "Files / `platform/bom`" version-bump table below all belong to **C.2** and are kept here for the follow-up branch's reference. The remaining sections (`context.xml`, `web.xml`, `Dockerfile*`, `docker-compose.yml` health check, verification gate) are **C.1** scope.
+
+## Pre-flight notes (C.2)
+
+The forced versions live in **`build-logic/src/main/kotlin/xnat-{war-application,java-library}.gradle.kts`** (the convention plugins), not in `apps/web/build.gradle.kts` as the original plan stated:
 
 | Locked | Reason it's locked | Spring 6 needs |
 | --- | --- | --- |
-| `io.projectreactor:reactor-core:2.0.8.RELEASE` | XNAT was on Spring 4/5; reactor 2 is API-compatible | reactor 3.x |
+| `io.projectreactor:reactor-core:2.0.8.RELEASE` | XNAT uses reactor 2 (`reactor-bus`); reactor 2 is not source-compatible with 3 | reactor 3.x |
 | `org.slf4j:slf4j-api:1.7.36` | logback 1.2.x compat | slf4j 2.x |
-| `ch.qos.logback:logback-classic:1.2.x` | java.util.logging bridge stability | logback 1.4.x+ |
+| `ch.qos.logback:logback-classic:1.2.x` | NOT actually forced via resolutionStrategy — only pinned in `gradle/libs.versions.toml` (`logback = "1.2.13"`) | logback 1.4.x+ |
 
-**Step 1 of Phase C** is dropping all three and verifying the build still passes on Tomcat 9 / Spring 5 with the new versions. If a transitive dep needs reactor 2 or slf4j 1, surface it before touching anything else. This is the "audit before migrate" step.
+The catalog also pins `slf4j = "1.7.30"` while the convention plugins force `1.7.36`; the force overrides. Step 1 of C.2 is dropping the forces and bumping the catalog values together, then verifying the build still passes on Tomcat 9 / Spring 5 with the new versions before touching Spring/Hibernate.
 
-## Pre-flight: circular dependency decision
+## Pre-flight: circular dependency decision (C.2)
 
 `apps/web` ↔ `libs/xdat` is currently broken by `build-tools/xnat-data-models` exposing shared interfaces (replaced the old `web-stubs`). Spring 6's stricter classloader can expose this. Two options:
 
 1. **Keep the workaround.** Document why; move on.
 2. **Retire it.** Resolve the circular by relocating shared interfaces into a proper `libs/xnat-shared-api` module.
 
-Pick (1) for this branch unless the Phase C build forces (2). Either choice goes into an ADR.
+Pick (1) for the C.2 branch unless the build forces (2). Either choice goes into an ADR.
 
 ## Files
 
