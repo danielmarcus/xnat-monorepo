@@ -166,12 +166,18 @@ if ! systemctl is-active --quiet docker; then
   sudo systemctl start docker
 fi
 
-# Create cloud override to fix WAR mount path (local dev uses relative path)
+# Create cloud override to fix WAR mount path (local dev uses relative path).
+# Mount the WAR at /opt/xnat-input/ROOT.war (the same staging path the base
+# docker-compose.yml uses post-Phase-C.1) so the jakarta-migrate-and-start
+# entrypoint can rewrite javax.* -> jakarta.* and then `mv` the migrated
+# copy into webapps/ROOT.war. Mounting directly at webapps/ROOT.war:ro made
+# the entrypoint try to `mv` into a read-only volume, sending xnat-web into
+# a crash-restart loop and timing out the 600s wait below.
 cat > docker-compose.cloud.yml <<'CLOUDEOF'
 services:
   xnat-web:
     volumes:
-      - ./xnat.war:/usr/local/tomcat/webapps/ROOT.war:ro
+      - ./xnat.war:/opt/xnat-input/ROOT.war:ro
       - ./xnat-conf/xnat-conf.properties:/data/xnat/home/config/xnat-conf.properties:ro
 CLOUDEOF
 
