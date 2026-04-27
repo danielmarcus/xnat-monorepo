@@ -1,0 +1,179 @@
+# =============================================================================
+# Default values for the XNAT chart.
+#
+# These defaults assume the matching terraform/eks module has been applied
+# and the operator is running `eks-deploy.sh`, which injects values for
+# image.repository, image.tag, database.host, and persistence.archive.efsId
+# via --set on `helm upgrade`. Everything else is overridable but the
+# defaults are sane for a staging deploy on the smallest viable instance.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Container image
+# -----------------------------------------------------------------------------
+image:
+  # Set by eks-deploy.sh to the ECR repository URL.
+  repository: ""
+  # Set by eks-deploy.sh to the Git SHA being deployed.
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# -----------------------------------------------------------------------------
+# Service account (optional IRSA for in-app S3 access, etc.)
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: ""
+  # When set, annotates the SA with eks.amazonaws.com/role-arn so the
+  # pod's AWS SDK calls authenticate as that IAM role.
+  irsaRoleArn: ""
+
+# -----------------------------------------------------------------------------
+# Database
+# -----------------------------------------------------------------------------
+database:
+  # rds: external Postgres provisioned by terraform/eks/rds.tf
+  # inCluster: a single-pod Postgres StatefulSet rendered by the chart
+  mode: rds
+
+  # When mode=rds, set to the RDS endpoint hostname (no port).
+  # When mode=inCluster, the chart auto-wires this to the in-cluster service.
+  host: ""
+  port: 5432
+  name: xnat
+  username: xnat
+
+  # Name of an existing Secret with key `password`. Lets the operator
+  # rotate the password without a chart rerender. eks-deploy.sh creates
+  # this secret from the EKS_DB_PASSWORD CI secret.
+  existingSecretName: xnat-db-credentials
+
+# -----------------------------------------------------------------------------
+# Optional in-cluster Postgres for environments without RDS access (dev/CI).
+# -----------------------------------------------------------------------------
+inClusterPostgres:
+  enabled: false
+  image: postgres:15-alpine
+  storageClass: gp3
+  storageSize: 20Gi
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+# -----------------------------------------------------------------------------
+# Persistence
+# -----------------------------------------------------------------------------
+persistence:
+  archive:
+    # RWX is required so future scale-out doesn't need a volume migration.
+    # efs-sc is created by terraform/eks/efs_csi.tf.
+    storageClass: efs-sc
+    accessMode: ReadWriteMany
+    size: 100Gi
+
+  config:
+    # XNAT_HOME — small (~50 MB working set) so a single AZ-bound EBS is fine.
+    storageClass: gp3
+    accessMode: ReadWriteOnce
+    size: 5Gi
+
+# -----------------------------------------------------------------------------
+# XNAT app pod
+# -----------------------------------------------------------------------------
+replicaCount: 1
+# Recreate is mandatory: ReadWriteOnce config volume + 1 replica means a
+# RollingUpdate stalls (new pod can't bind the volume the old pod still holds).
+strategy:
+  type: Recreate
+
+resources:
+  requests:
+    cpu: "1"
+    memory: "3Gi"
+  limits:
+    cpu: "2"
+    memory: "4Gi"
+
+# JVM tuning. -Xmx must fit under resources.limits.memory minus Tomcat
+# overhead (~500Mi). Keep Xss small — XNAT's Velocity templating recurses.
+javaOpts: "-Xms1g -Xmx3g -Xss512k"
+
+# -----------------------------------------------------------------------------
+# Service / Ingress
+# -----------------------------------------------------------------------------
+service:
+  # LoadBalancer creates a classic ELB and returns a hostname. Default for
+  # the weekend-friendly path: no domain, no certs, just hit the hostname.
+  # ClusterIP if you intend to put an Ingress in front via .ingress below.
+  type: LoadBalancer
+  port: 80
+  targetPort: 8080
+  annotations: {}
+
+ingress:
+  # Set true only when you've also set var.enable_ingress_alb in terraform
+  # AND have a domain + ACM cert. Renders an ALB Ingress; service.type
+  # should be ClusterIP in this mode.
+  enabled: false
+  className: alb
+  host: ""
+  acmCertificateArn: ""
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+
+# -----------------------------------------------------------------------------
+# Probes
+#
+# Phase A finding: /xapi/siteConfig/initialized requires auth in this XNAT
+# release. /xapi/siteConfig/buildInfo is the actual unauthenticated endpoint
+# safe for K8s probes.
+# -----------------------------------------------------------------------------
+readinessProbe:
+  httpGet:
+    path: /xapi/siteConfig/buildInfo
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  failureThreshold: 30
+  timeoutSeconds: 5
+
+livenessProbe:
+  httpGet:
+    path: /xapi/siteConfig/buildInfo
+    port: 8080
+  # Tomcat warmup is slow; a tight liveness probe will kill the pod
+  # mid-startup. 5-minute initial delay gives WAR deploy + db schema
+  # init + Spring context startup enough headroom.
+  initialDelaySeconds: 300
+  periodSeconds: 30
+  failureThreshold: 3
+  timeoutSeconds: 5
+
+# Optional pod-level config
+podSecurityContext: {}
+securityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Extra environment variables, raw secret refs, etc. Useful for SMTP wiring,
+# OAuth providers, or anything not in the standard XNAT_* env set.
+extraEnv: []
+# - name: SOME_VAR
+#   value: "some value"
+# - name: SECRET_VAR
+#   valueFrom:
+#     secretKeyRef:
+#       name: my-secret
+#       key: my-key

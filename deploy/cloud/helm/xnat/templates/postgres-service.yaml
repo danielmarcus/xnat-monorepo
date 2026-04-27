@@ -1,0 +1,18 @@
+{{- if .Values.inClusterPostgres.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "xnat.fullname" . }}-postgres
+  labels:
+    {{- include "xnat.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: postgres
+      name: postgres
+  selector:
+    {{- include "xnat.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+{{- end }}

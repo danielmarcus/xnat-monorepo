@@ -1,0 +1,14 @@
+apiVersion: v2
+name: xnat
+description: XNAT imaging informatics platform — single-replica deployment with EFS-backed archive
+type: application
+version: 0.1.0
+appVersion: "1.10.0-RC2"
+maintainers:
+  - name: XNAT Monorepo
+keywords:
+  - xnat
+  - dicom
+  - medical-imaging
+sources:
+  - https://github.com/danielmarcus/xnat-monorepo
