@@ -55,6 +55,18 @@ Snapshot builds skip signing.
 | `XNAT_CLOUD_HOST` | Public IP or hostname of the deployed XNAT cloud instance | `cloud-deploy.yml` | e.g. `1.2.3.4` or `xnat.example.com` |
 | `XNAT_CLOUD_ADMIN_PASS` | XNAT admin password configured on the cloud instance | `cloud-deploy.yml` | Plain string |
 
+### EKS Deploy
+
+| Secret Name | Purpose | Required By | Format |
+|-------------|---------|-------------|--------|
+| `AWS_ROLE_TO_ASSUME` | OIDC-assumable IAM role used by `eks-deploy.yml`. Must have permissions for EKS describe + token, ECR push, RDS describe, EFS describe, optionally ALB controller Helm install. | `eks-deploy.yml` | ARN, e.g. `arn:aws:iam::123456789012:role/github-actions-xnat-eks` |
+| `EKS_DB_PASSWORD` | Postgres password for the RDS instance provisioned by `deploy/cloud/terraform/eks/`. Same value is used to create the in-cluster `xnat-db-credentials` Secret that the chart references. Must be ≥8 chars, no `/@" '` per RDS rules. | `eks-deploy.yml` | Plain string |
+| `EKS_XNAT_ADMIN_PASS` | Optional. XNAT site-admin password to use for the post-deploy smoke tests. Defaults to `admin` (the first-time-init credentials a fresh XNAT bootstraps with). Set this once you've changed the admin password through the UI. | `eks-deploy.yml` | Plain string |
+
+The existing `TF_BACKEND_BUCKET` / `TF_BACKEND_REGION` secrets are reused for
+the EKS module's state file (different `key`: `xnat/eks/terraform.tfstate`).
+`AWS_REGION` is reused, and may be overridden per-run via the workflow input.
+
 ### SSH Access to Cloud Instance
 
 | Secret Name | Purpose | Required By | Format |

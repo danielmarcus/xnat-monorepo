@@ -1,0 +1,257 @@
+# EKS Deploy Workflow
+#
+# Triggered manually (workflow_dispatch) and on tags. Provisions infra via
+# the deploy/cloud/terraform/eks/ module, builds + pushes the WAR-baked
+# image, helm-installs the chart, captures the assigned ELB hostname,
+# and runs the full smoke suite against it.
+#
+# This workflow is INDEPENDENT of cloud-deploy.yml — both deploy targets
+# (single-EC2 and EKS) coexist. Either can fail without affecting the other.
+#
+# Required secrets:
+#   AWS_ROLE_TO_ASSUME       OIDC role ARN with EKS+ECR+RDS+EFS+ALB perms
+#   AWS_REGION               Region for the deployment (e.g. us-east-1)
+#   TF_BACKEND_BUCKET        S3 bucket for terraform state
+#   TF_BACKEND_REGION        Region of the state bucket
+#   EKS_DB_PASSWORD          Postgres password for the RDS instance + chart Secret
+#
+# See CI_SECRETS.md for the full secrets reference.
+
+name: EKS Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment (staging | production | dev | qa)"
+        required: false
+        default: "staging"
+      apply_terraform:
+        description: "Apply terraform changes (false = chart-only update on existing cluster)"
+        required: false
+        default: "false"
+        type: boolean
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write   # required for OIDC-based AWS auth
+  actions: read
+
+env:
+  TF_DIR: deploy/cloud/terraform/eks
+  TF_STATE_KEY: xnat/eks/terraform.tfstate
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+jobs:
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    outputs:
+      should-deploy: ${{ steps.check.outputs.proceed }}
+    steps:
+      - name: Check AWS OIDC role secret
+        id: check
+        run: |
+          if [[ -n "${{ secrets.AWS_ROLE_TO_ASSUME }}" ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::AWS_ROLE_TO_ASSUME is set — EKS deploy will proceed."
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AWS_ROLE_TO_ASSUME secret not set — skipping EKS deploy."
+          fi
+
+  deploy:
+    name: Terraform + Helm + Smoke
+    needs: preflight
+    if: needs.preflight.outputs.should-deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout
+      # -----------------------------------------------------------------------
+      - uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 2. AWS OIDC auth
+      # -----------------------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # -----------------------------------------------------------------------
+      # 3. Build the WAR if not already cached from main-build
+      #
+      # Reusing main-build's artifact (as cloud-deploy.yml does) is preferred,
+      # but for a self-contained on-demand workflow we just build here. If
+      # this gets slow, factor out a separate WAR-build job and have both
+      # workflows depend on it.
+      # -----------------------------------------------------------------------
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build WAR
+        run: ./gradlew :apps:web:war
+
+      # -----------------------------------------------------------------------
+      # 4. Terraform — only when apply_terraform=true.
+      #
+      # The default (false) supports the common case: infra already exists,
+      # we're just rolling out a new image. Setting true on dispatch runs
+      # the full apply path.
+      # -----------------------------------------------------------------------
+      - name: Set up Terraform
+        if: ${{ inputs.apply_terraform == true }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init + apply
+        if: ${{ inputs.apply_terraform == true }}
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          TF_VAR_db_password: ${{ secrets.EKS_DB_PASSWORD }}
+          TF_VAR_environment: ${{ inputs.environment }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_BACKEND_BUCKET }}" \
+            -backend-config="key=${{ env.TF_STATE_KEY }}" \
+            -backend-config="region=${{ secrets.TF_BACKEND_REGION || env.AWS_REGION }}" \
+            -input=false
+          terraform apply -auto-approve -input=false
+
+      # -----------------------------------------------------------------------
+      # 5. Read terraform outputs (works whether we just applied or not).
+      # -----------------------------------------------------------------------
+      - name: Set up Terraform (outputs path)
+        if: ${{ inputs.apply_terraform != true }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Init terraform for output read
+        if: ${{ inputs.apply_terraform != true }}
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_BACKEND_BUCKET }}" \
+            -backend-config="key=${{ env.TF_STATE_KEY }}" \
+            -backend-config="region=${{ secrets.TF_BACKEND_REGION || env.AWS_REGION }}" \
+            -input=false
+
+      - name: Capture terraform outputs
+        id: tf
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          {
+            echo "ecr_url=$(terraform output -raw ecr_repository_url)"
+            echo "cluster_name=$(terraform output -raw eks_cluster_name)"
+            echo "rds_endpoint=$(terraform output -raw rds_endpoint)"
+          } >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------------------
+      # 6. Install kubectl + helm + run the deploy script.
+      # -----------------------------------------------------------------------
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Install helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.0
+
+      - name: Deploy via eks-deploy.sh
+        id: deploy
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+          ECR_REPOSITORY_URL: ${{ steps.tf.outputs.ecr_url }}
+          EKS_CLUSTER_NAME: ${{ steps.tf.outputs.cluster_name }}
+          RDS_ENDPOINT: ${{ steps.tf.outputs.rds_endpoint }}
+          EKS_DB_PASSWORD: ${{ secrets.EKS_DB_PASSWORD }}
+          GIT_SHA: ${{ github.sha }}
+        run: bash deploy/cloud/scripts/eks-deploy.sh
+
+      # -----------------------------------------------------------------------
+      # 7. Smoke tests against the live ELB hostname.
+      # -----------------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install smoke-test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r smoke-tests/requirements.txt
+
+      - name: Run smoke tests (fast)
+        env:
+          XNAT_HOST: http://${{ steps.deploy.outputs.external_host }}
+          XNAT_PORT: "80"
+          XNAT_ADMIN_USER: admin
+          XNAT_ADMIN_PASS: ${{ secrets.EKS_XNAT_ADMIN_PASS || 'admin' }}
+        run: |
+          pytest smoke-tests/ \
+            -m "not slow and not container_service" \
+            --reruns 2 \
+            --junitxml=eks-smoke-results-fast.xml \
+            -v
+
+      - name: Run smoke tests (full)
+        env:
+          XNAT_HOST: http://${{ steps.deploy.outputs.external_host }}
+          XNAT_PORT: "80"
+          XNAT_ADMIN_USER: admin
+          XNAT_ADMIN_PASS: ${{ secrets.EKS_XNAT_ADMIN_PASS || 'admin' }}
+        run: |
+          pytest smoke-tests/ \
+            -m "slow or dicom" \
+            --reruns 2 \
+            --junitxml=eks-smoke-results-full.xml \
+            -v
+
+      # -----------------------------------------------------------------------
+      # 8. Upload reports.
+      # -----------------------------------------------------------------------
+      - name: Upload smoke results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eks-smoke-results-${{ github.sha }}
+          path: |
+            eks-smoke-results-fast.xml
+            eks-smoke-results-full.xml
+          retention-days: 30
+
+      - name: Capture pod logs on failure
+        if: failure()
+        run: |
+          mkdir -p /tmp/k8s-diagnostics
+          kubectl describe pods -l app.kubernetes.io/instance=xnat \
+            > /tmp/k8s-diagnostics/pod-describe.txt 2>&1 || true
+          kubectl logs -l app.kubernetes.io/instance=xnat --tail=500 \
+            > /tmp/k8s-diagnostics/pod-logs.txt 2>&1 || true
+          kubectl get events --sort-by='.lastTimestamp' \
+            > /tmp/k8s-diagnostics/events.txt 2>&1 || true
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eks-diagnostics-${{ github.sha }}
+          path: /tmp/k8s-diagnostics/
+          retention-days: 7

@@ -1,0 +1,105 @@
+# XNAT Web Application Dockerfile — Kubernetes / EKS variant
+#
+# Differs from the sibling Dockerfile in one way only: this variant bakes
+# the WAR into the image at build time (COPY ${WAR_PATH} -> ROOT.war),
+# while the sibling expects the WAR to be mounted in at container start.
+# Baking the WAR is required for ECR-pushed K8s deploys — pods can't share
+# a host-mounted volume across nodes.
+#
+# Phase C will bump the base to tomcat:10.1-jdk21-temurin together with
+# enabling the Apache jakartaee-migration listener; until then this stays
+# on Tomcat 9 / javax to keep Phase B independent of the Tomcat 10 work.
+
+FROM tomcat:9.0-jdk21-temurin
+
+LABEL org.opencontainers.image.authors="XNAT Monorepo"
+
+# ----- build-time defaults (overridable via docker build --build-arg) -----
+ARG XNAT_ROOT=/data/xnat
+ARG XNAT_HOME=/data/xnat/home
+ARG XNAT_DATASOURCE_DRIVER=org.postgresql.Driver
+ARG XNAT_DATASOURCE_URL=jdbc:postgresql://xnat-db:5432/xnat
+ARG XNAT_DATASOURCE_USERNAME=xnat
+ARG XNAT_DATASOURCE_PASSWORD=xnat
+ARG XNAT_EMAIL=admin@example.com
+ARG XNAT_SMTP_ENABLED=false
+ARG XNAT_SMTP_HOSTNAME=
+ARG XNAT_SMTP_PORT=
+ARG XNAT_SMTP_AUTH=
+ARG XNAT_SMTP_USERNAME=
+ARG XNAT_SMTP_PASSWORD=
+ARG XNAT_SMTP_START_TLS=
+ARG TOMCAT_XNAT_FOLDER=ROOT
+
+# Path to the built WAR. Defaulted so a plain `docker build .` from the
+# repo root works after `./gradlew :apps:web:war`. CI overrides via
+# --build-arg WAR_PATH=... if the artifact lands somewhere else.
+ARG WAR_PATH=apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war
+
+# PostgreSQL JDBC driver version — must match what XNAT expects.
+ARG PG_JDBC_VERSION=42.7.4
+
+# ----- install OS packages -----
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends postgresql-client wget && \
+    rm -rf /var/lib/apt/lists/*
+
+# ----- remove default Tomcat webapps -----
+RUN rm -rf ${CATALINA_HOME}/webapps/*
+
+# ----- PostgreSQL JDBC driver -----
+RUN wget --quiet --output-document=${CATALINA_HOME}/lib/postgresql-${PG_JDBC_VERSION}.jar \
+    "https://jdbc.postgresql.org/download/postgresql-${PG_JDBC_VERSION}.jar"
+
+# ----- create XNAT directory structure -----
+# The `archive` and config-bearing paths under XNAT_HOME are also volume
+# mount points in the K8s deployment — created here so the image works
+# standalone too (e.g. `docker run` for smoke tests).
+RUN mkdir -p \
+    ${XNAT_HOME}/config \
+    ${XNAT_HOME}/logs \
+    ${XNAT_HOME}/plugins \
+    ${XNAT_HOME}/work \
+    ${XNAT_ROOT}/archive \
+    ${XNAT_ROOT}/build \
+    ${XNAT_ROOT}/cache \
+    ${XNAT_ROOT}/ftp \
+    ${XNAT_ROOT}/pipeline \
+    ${XNAT_ROOT}/prearchive \
+    ${XNAT_ROOT}/inbox
+
+# ----- Tomcat tuning for XNAT -----
+RUN sed -i 's/^tomcat.util.scan.StandardJarScanFilter.jarsToSkip=\\/&\nbcpkix-*.jar,bcprov-*.jar,bcutil-*.jar,\\/' \
+    ${CATALINA_HOME}/conf/catalina.properties
+
+ENV JDK_JAVA_OPTIONS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED"
+
+# ----- helper scripts (shared with the sibling Dockerfile) -----
+COPY make-xnat-config.sh /usr/local/bin/make-xnat-config.sh
+COPY wait-for-postgres.sh /usr/local/bin/wait-for-postgres.sh
+RUN chmod +x /usr/local/bin/make-xnat-config.sh /usr/local/bin/wait-for-postgres.sh
+
+# ----- generate default xnat-conf.properties at build time -----
+# In the K8s flow this gets overwritten by a ConfigMap-mounted file at
+# /data/xnat/home/config/xnat-conf.properties, so the build-time copy is
+# just a fallback for `docker run` (no compose, no Helm).
+RUN /usr/local/bin/make-xnat-config.sh
+
+# ----- bake the WAR into the image -----
+# Plain Tomcat servlet path: COPY-ing to webapps/ROOT.war makes XNAT live
+# at the container root (no /xnat path prefix). The Helm chart's probes
+# and the smoke tests both assume this.
+COPY ${WAR_PATH} ${CATALINA_HOME}/webapps/ROOT.war
+
+# ----- environment variables available at runtime -----
+ENV XNAT_HOME=${XNAT_HOME} \
+    XNAT_ROOT=${XNAT_ROOT} \
+    XNAT_DATASOURCE_USERNAME=${XNAT_DATASOURCE_USERNAME} \
+    PGPASSWORD=${XNAT_DATASOURCE_PASSWORD}
+
+EXPOSE 8080
+
+# Wait for Postgres to be ready, then start Tomcat. wait-for-postgres.sh
+# is a no-op when reachable so it doubles as the K8s init-container's
+# fallback if the chart's separate netcat-based wait ever drifts.
+CMD ["wait-for-postgres.sh", "/usr/local/tomcat/bin/catalina.sh", "run"]
