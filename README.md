@@ -59,17 +59,55 @@ The WAR is written to `apps/web/build/libs/web-1.10.0-RC2-SNAPSHOT.war`.
 ### Deploy Locally with Docker Compose
 
 ```sh
-# Start a local XNAT instance (PostgreSQL + Tomcat)
+# Start a local XNAT instance (PostgreSQL + Tomcat 10)
 docker compose -f deploy/docker-compose/docker-compose.yml up -d
 
 # Tail logs
 docker compose -f deploy/docker-compose/docker-compose.yml logs -f xnat-web
 ```
 
-Once XNAT finishes initializing (allow ~2 minutes), open
+Once XNAT finishes initializing (~2 minutes; first boot adds ~20s for the
+Jakarta-EE migration step described under "Tomcat 10" below), open
 [http://localhost](http://localhost) and log in with `admin` / `admin`.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for full local setup instructions.
+
+---
+
+## Cloud Deployment Targets
+
+Two deployment targets coexist; pick the one that matches your environment.
+
+| Target | Path | When to use |
+|---|---|---|
+| **Single AWS EC2** | `deploy/cloud/terraform/` + `deploy/cloud/scripts/deploy.sh` | Staging / reference deployment. One instance, runs the same Compose stack as local dev. See [ADR 0004](docs/adr/0004-cloud-deployment.md). |
+| **Amazon EKS** | `deploy/cloud/terraform/eks/` + `deploy/cloud/helm/xnat/` + `deploy/cloud/scripts/eks-deploy.sh` | Managed Kubernetes with RDS Postgres + EFS-backed archive. See [ADR 0006](docs/adr/0006-eks-deployment-target.md) and the [Helm chart README](deploy/cloud/helm/xnat/README.md). |
+
+Both deploy the same WAR artifact; they're independent (one stalling doesn't
+block the other). Pick EC2 for reference / dev-staging; pick EKS when you need
+a managed control plane and the option to scale RDS / EFS independently.
+
+---
+
+## Tomcat 10 / Jakarta EE 9
+
+XNAT runs on Tomcat 10.1 with Jakarta EE 9 servlet APIs as of the
+`feat/tomcat10-eks-tests` work. The codebase still imports `javax.*` at
+compile time (Spring 5.3.x, Hibernate 5.6.x, Restlet 1.1.10). The container
+entrypoint runs Apache's
+[`jakartaee-migration`](https://tomcat.apache.org/migration-10.html) tool
+against the WAR before Tomcat sees it, rewriting `javax.*` → `jakarta.*`
+references at deploy time.
+
+This adds about 20 seconds to first-container-boot. A sentinel file under
+`webapps/.jakarta-migrated` skips the rewrite on subsequent restarts of the
+same container.
+
+Source-level migration to `jakarta.*` (and the corresponding Spring 6 /
+Hibernate 6 / Spring Security 6 bumps) is deferred — see
+[ADR 0005](docs/adr/0005-tomcat-10-jakarta-migration.md) for rationale and
+[`docs/plan-tomcat10-eks-tests.md`](docs/plan-tomcat10-eks-tests.md) for the
+Phase C.1 / C.2 scope split.
 
 ---
 
@@ -113,7 +151,10 @@ xnat-monorepo/                    <- repo root
 │   ├── docker-compose/           <- Docker Compose stack for local + CI use
 │   └── cloud/
 │       ├── terraform/            <- AWS EC2 infrastructure (Terraform)
-│       └── scripts/              <- deploy.sh, teardown.sh
+│       │   └── eks/              <- AWS EKS infrastructure (Terraform)
+│       ├── helm/
+│       │   └── xnat/             <- Helm chart for the EKS deployment
+│       └── scripts/              <- deploy.sh, teardown.sh, eks-deploy.sh
 ├── smoke-tests/                  <- Black-box smoke tests (pytest)
 └── docs/
     └── adr/                      <- Architecture Decision Records
@@ -127,7 +168,10 @@ xnat-monorepo/                    <- repo root
 | `build-logic/` | Convention plugins that standardize build config across all modules |
 | `platform/bom` | Dependency BOM for version alignment via the Gradle version catalog |
 | `deploy/docker-compose` | Docker Compose stack for local development and CI smoke tests |
-| `deploy/cloud` | Terraform + shell scripts for AWS EC2 cloud deployment |
+| `deploy/cloud/terraform/` | Terraform module for the single-EC2 deploy target |
+| `deploy/cloud/terraform/eks/` | Terraform module for the EKS deploy target (cluster, node group, RDS Postgres, EFS, ECR) |
+| `deploy/cloud/helm/xnat/` | Helm chart deployed onto the EKS cluster |
+| `deploy/cloud/scripts/` | Shell scripts: `deploy.sh` (EC2 path), `teardown.sh`, `eks-deploy.sh` |
 | `smoke-tests/` | Black-box smoke tests run against a live XNAT instance |
 | `docs/adr` | Architecture Decision Records |
 
