@@ -129,6 +129,16 @@ dependencies {
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 
+    // Forked test JVMs default to a 512 MB heap, which is too small for
+    // some XNAT tests:
+    //   libs/config/.../ConfigPlatformTests.testLargeConfigFile loads a
+    //   multi-MB Velocity config and runs Hibernate against it; on the
+    //   default heap it OOMs with java.lang.OutOfMemoryError: Java heap
+    //   space (visible in CI but not locally on developer machines that
+    //   happen to inherit a larger Gradle JAVA_OPTS). 2 GB matches the
+    //   Gradle daemon's GRADLE_OPTS used in main-build / pr-validation.
+    maxHeapSize = "2g"
+
     // Forward useful system properties into the test JVM
     systemProperty("file.encoding", "UTF-8")
 
