@@ -112,6 +112,10 @@ dependencies {
     compileOnly(libs.h2)
 
     // --- Test ---
+    // h2 is compileOnly above (provided by the host) but the framework's own
+    // tests reference org.h2.api.ErrorCode in TestDBUtils, so it must be on
+    // the test classpath too.
+    testImplementation(libs.h2)
     testImplementation(libs.junit.jupiter.api)
     testImplementation(libs.junit.jupiter.engine)
     testImplementation(libs.spring.test)

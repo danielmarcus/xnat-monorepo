@@ -36,6 +36,9 @@ dependencies {
     implementation("javax.annotation:javax.annotation-api:1.3.2")
 
     // --- Test ---
+    // libs:test exposes org.nrg.test.utils.{TestBeans,TestFileUtils} that
+    // NrgConfigTestConfiguration imports.
+    testImplementation(project(":libs:test"))
     testImplementation(libs.junit4)
     testImplementation(libs.spring.test)
     testImplementation(libs.assertj.core)

@@ -77,6 +77,15 @@ dependencies {
     annotationProcessor(project(":libs:framework"))
     annotationProcessor(libs.auto.value)
 
+    // The io.freefair.lombok convention plugin auto-wires Lombok onto
+    // `compileOnly` + `annotationProcessor` for the main source set, but
+    // not consistently onto the test source set in v9.x — `gradle :apps:web:
+    // dependencies --configuration testCompileOnly` shows no Lombok jar.
+    // Without it, @Slf4j-annotated test classes fail to compile because
+    // the generated `log` field never lands.  Declare both explicitly.
+    testCompileOnly(libs.lombok)
+    testAnnotationProcessor(libs.lombok)
+
     // --- Internal modules (api) ---
     api(project(":libs:xdat"))
     api(project(":build-tools:xnat-data-models"))
@@ -285,6 +294,13 @@ dependencies {
     testImplementation(libs.testcontainers.core)
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.testcontainers.postgresql)
+    // Test sources reference servlet types directly (HttpServletResponse,
+    // ServletException, Filter via Spring's WebSecurityConfigurerAdapter
+    // and NestedServletException). The main classpath has javax.servlet-api
+    // as compileOnly (line ~262 above); tests need their own copy.
+    testCompileOnly(libs.javax.servlet.api)
+    // HibernateConfig.java in test sources uses BasicDataSource directly.
+    testImplementation("org.apache.commons:commons-dbcp2:2.12.0")
 }
 
 tasks.withType<Jar>().configureEach {

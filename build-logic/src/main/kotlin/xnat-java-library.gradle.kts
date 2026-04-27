@@ -32,6 +32,27 @@ configurations.all {
         // Various transitive deps pull in SLF4J 2.x which is incompatible.
         force("org.slf4j:slf4j-api:1.7.36")
     }
+
+    // Strip obsolete XML parser jars. Turbine 2.3.3 (and its Apache Avalon
+    // / Excalibur chain) drag in xerces 2.6.2 (2004), xml-apis 1.0.b2, and
+    // xalan 2.4.1 — all pre-JAXP-1.3. Once any of those land on the
+    // classpath, Java's SPI lookup picks them up first via
+    // META-INF/services/javax.xml.parsers.DocumentBuilderFactory, and
+    // ehcache's XmlConfiguration parser then crashes:
+    //
+    //   UnsupportedOperationException: This parser does not support
+    //   specification "null" version "null"
+    //     at javax.xml.parsers.DocumentBuilderFactory.setSchema(...)
+    //     at org.ehcache.xml.ConfigurationParser.documentBuilder(...)
+    //
+    // The JDK ships a fully-conformant Xerces in the java.xml module, so
+    // dropping these jars unblocks every modern JAXP consumer (Hibernate,
+    // ehcache, Jackson XML, etc.) without losing any functionality.
+    // apps/web/build.gradle.kts has the same excludes inline; this central
+    // copy covers every library module.
+    exclude(group = "xerces")
+    exclude(group = "xml-apis")
+    exclude(group = "xalan")
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +92,34 @@ tasks.withType<Javadoc>().configureEach {
     }
     // Don't fail the build on javadoc errors (generated code often has issues)
     isFailOnError = false
+}
+
+// ---------------------------------------------------------------------------
+// Test classpath additions shared by every library module
+//
+// Spring Test's WebDelegatingSmartContextLoader is on the runtime classpath
+// of every Spring-based test context (it's chosen at startup even when no
+// @WebAppConfiguration is present). It needs javax.servlet.ServletContext
+// to load. Modules that declare `compileOnly(libs.javax.servlet.api)` for
+// their main sources still don't have it on the test runtime classpath,
+// which produces NoClassDefFoundError at test-context bootstrap.
+//
+// Adding the servlet API at testRuntimeOnly here means every module gets
+// the runtime jar without having to repeat the declaration. It costs ~200KB
+// of memory in the test JVM and zero compile-time impact.
+// ---------------------------------------------------------------------------
+
+dependencies {
+    "testRuntimeOnly"("javax.servlet:javax.servlet-api:3.1.0")
+    // Many modules declare only junit4 on testImplementation. The convention
+    // plugin's useJUnitPlatform() requires a Platform engine on the runtime
+    // classpath; without one the test JVM aborts with
+    //   PreconditionViolationException: Cannot create Launcher without at
+    //   least one TestEngine; consider adding an engine implementation JAR
+    // junit-vintage-engine bridges JUnit 4 onto Platform; jupiter-engine
+    // covers @Test (JUnit 5) modules. Both are safe to declare in parallel.
+    "testRuntimeOnly"("org.junit.vintage:junit-vintage-engine:5.8.1")
+    "testRuntimeOnly"("org.junit.jupiter:junit-jupiter-engine:5.8.1")
 }
 
 // ---------------------------------------------------------------------------

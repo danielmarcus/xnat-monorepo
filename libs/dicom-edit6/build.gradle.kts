@@ -45,6 +45,9 @@ dependencies {
     implementation(libs.slf4j.api)
 
     // --- Test ---
+    // libs:test exposes org.nrg.test.workers.resources.ResourceManager that
+    // every test in this module imports for fixture resource loading.
+    testImplementation(project(":libs:test"))
     testImplementation(libs.junit4)
     testImplementation(libs.spring.test)
     testImplementation("net.imagej:ij:1.54f")

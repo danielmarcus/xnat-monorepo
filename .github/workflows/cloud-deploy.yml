@@ -311,7 +311,7 @@ jobs:
             cloud-smoke-results-full.xml
             cloud-smoke-report-fast.html
             cloud-smoke-report-full.html
-          retention-days: 30
+          retention-days: 7
 
       # NOTE: The cloud environment is NOT torn down — it remains running as a
       # staging / QA environment.  Use terraform destroy manually when needed.

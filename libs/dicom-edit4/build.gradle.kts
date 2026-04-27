@@ -52,6 +52,9 @@ dependencies {
     implementation(libs.slf4j.api)
 
     // --- Test ---
+    // libs:test exposes org.nrg.test.workers.resources.ResourceManager used
+    // by the dcm.edit.fn tests to load DICOM fixtures from the classpath.
+    testImplementation(project(":libs:test"))
     testImplementation(libs.junit4)
     testImplementation(libs.spring.test)
     testImplementation(libs.log4j.over.slf4j)
