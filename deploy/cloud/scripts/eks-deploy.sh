@@ -140,7 +140,11 @@ HELM_ARGS=(
   --set "database.mode=rds"
   --set "inClusterPostgres.enabled=false"
   --wait
-  --timeout 15m
+  # 25 min — first-time deploy needs RDS schema sync inside the pod plus
+  # all the cold-start stuff covered by the readiness/liveness initial
+  # delays in values.yaml. Subsequent deploys finish in 2-3 min, but the
+  # ceiling has to accommodate the worst case.
+  --timeout 25m
 )
 
 if [[ "${ENABLE_INGRESS_ALB}" == "true" ]]; then

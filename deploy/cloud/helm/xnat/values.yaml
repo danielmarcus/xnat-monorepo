@@ -143,19 +143,26 @@ readinessProbe:
   httpGet:
     path: /xapi/siteConfig/buildInfo
     port: 8080
+  # 60s + 60×10s = ~11 min budget before the pod is permanently NotReady.
+  # First-run XNAT cold start: Tomcat (~30s) + ROOT.war explode (~30s) +
+  # Spring context init (1-2 min) + Hibernate hbm2ddl=update on a fresh
+  # RDS (1-3 min) + initial Velocity render. Easily 5-7 min on first boot.
   initialDelaySeconds: 60
   periodSeconds: 10
-  failureThreshold: 30
+  failureThreshold: 60
   timeoutSeconds: 5
 
 livenessProbe:
   httpGet:
     path: /xapi/siteConfig/buildInfo
     port: 8080
-  # Tomcat warmup is slow; a tight liveness probe will kill the pod
-  # mid-startup. 5-minute initial delay gives WAR deploy + db schema
-  # init + Spring context startup enough headroom.
-  initialDelaySeconds: 300
+  # 600s + 3×30s = 11.5 min before kubelet kills the container. Tomcat
+  # warmup is slow on first boot for the reasons above; a tight probe
+  # kills mid-startup and the pod CrashLoops. The jakartaee-migration
+  # rewrite (~5-10 min on EKS gp3) was the worst offender — moved to
+  # image build time in Dockerfile.k8s — but Hibernate schema sync on
+  # first deploy can still chew several minutes.
+  initialDelaySeconds: 600
   periodSeconds: 30
   failureThreshold: 3
   timeoutSeconds: 5
