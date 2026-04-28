@@ -50,6 +50,17 @@ HELM_RELEASE_NAME="${HELM_RELEASE_NAME:-xnat}"
 HELM_NAMESPACE="${HELM_NAMESPACE:-default}"
 ENABLE_INGRESS_ALB="${ENABLE_INGRESS_ALB:-false}"
 
+# Mirror the chart's `xnat.fullname` helper (templates/_helpers.tpl): if the
+# release name already contains the chart name, fullname == release; otherwise
+# fullname == "<release>-<chart>". With the default HELM_RELEASE_NAME=xnat
+# this collapses to "xnat", so kubectl resource names like
+# `${HELM_RELEASE_NAME}-xnat` would refer to the non-existent "xnat-xnat".
+if [[ "${HELM_RELEASE_NAME}" == *"xnat"* ]]; then
+  FULLNAME="${HELM_RELEASE_NAME}"
+else
+  FULLNAME="${HELM_RELEASE_NAME}-xnat"
+fi
+
 # Resolve the script's own directory so relative paths work whether invoked
 # from the repo root, from CI, or from `deploy/cloud/scripts/`.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -126,6 +137,8 @@ HELM_ARGS=(
   --set "image.repository=${ECR_REPOSITORY_URL}"
   --set "image.tag=${GIT_SHA}"
   --set "database.host=${RDS_ENDPOINT}"
+  --set "database.mode=rds"
+  --set "inClusterPostgres.enabled=false"
   --wait
   --timeout 15m
 )
@@ -150,18 +163,18 @@ echo "==> 6/6 resolve external hostname"
 kubectl rollout status \
   --namespace "${HELM_NAMESPACE}" \
   --timeout 10m \
-  "deployment/${HELM_RELEASE_NAME}-xnat"
+  "deployment/${FULLNAME}"
 
 if [[ "${ENABLE_INGRESS_ALB}" == "true" ]]; then
   EXTERNAL_HOST=$(kubectl get ingress \
     --namespace "${HELM_NAMESPACE}" \
-    "${HELM_RELEASE_NAME}-xnat" \
+    "${FULLNAME}" \
     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
   ENDPOINT_KIND="ALB"
 else
   EXTERNAL_HOST=$(kubectl get svc \
     --namespace "${HELM_NAMESPACE}" \
-    "${HELM_RELEASE_NAME}-xnat-web" \
+    "${FULLNAME}-web" \
     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
   ENDPOINT_KIND="ELB"
 fi
