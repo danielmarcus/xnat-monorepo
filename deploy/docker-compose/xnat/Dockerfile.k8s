@@ -101,6 +101,22 @@ RUN /usr/local/bin/make-xnat-config.sh
 # and the smoke tests both assume this.
 COPY ${WAR_PATH} ${CATALINA_HOME}/webapps/ROOT.war
 
+# ----- pre-run jakartaee-migration at build time -----
+# Without this, the runtime entrypoint (jakarta-migrate-and-start.sh) does
+# the rewrite on every cold pod start. On EKS that takes 5-10 min — long
+# enough that the liveness probe kills the container before Tomcat ever
+# binds 8080. Doing it here turns it into a one-time per-image-build cost
+# (~30s on a beefy runner) and the runtime script's sentinel-check skips
+# the rewrite, leaving just Tomcat startup at pod start.
+#
+# The sentinel path matches what jakarta-migrate-and-start.sh checks for.
+RUN java -jar ${CATALINA_HOME}/lib/jakartaee-migration-1.0.10-shaded.jar \
+        -profile=EE \
+        ${CATALINA_HOME}/webapps/ROOT.war \
+        /tmp/ROOT-jakarta.war \
+ && mv /tmp/ROOT-jakarta.war ${CATALINA_HOME}/webapps/ROOT.war \
+ && touch ${CATALINA_HOME}/webapps/.jakarta-migrated
+
 # ----- environment variables available at runtime -----
 ENV XNAT_HOME=${XNAT_HOME} \
     XNAT_ROOT=${XNAT_ROOT} \
