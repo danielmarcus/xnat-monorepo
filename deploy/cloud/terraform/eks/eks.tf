@@ -182,7 +182,56 @@ resource "aws_eks_addon" "ebs_csi" {
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
+  # Bind the addon's controller pods (kube-system:ebs-csi-controller-sa) to a
+  # dedicated IRSA role. Without this the controller falls back to IMDS for
+  # AWS credentials, which doesn't work because EKS's default node launch
+  # template sets http-put-response-hop-limit=1 so pods can't reach IMDSv2.
+  # Symptom is that addon.health.issues stays empty (EKS thinks it's installed)
+  # but the addon never reaches ACTIVE because every EBS API call from the
+  # controller silently fails. IRSA bypasses IMDS entirely.
+  service_account_role_arn = aws_iam_role.ebs_csi.arn
+
   depends_on = [aws_eks_node_group.this]
+}
+
+# -----------------------------------------------------------------------------
+# IRSA role for the AWS EBS CSI driver controller. Trusts the cluster's OIDC
+# provider, scoped to the kube-system:ebs-csi-controller-sa service account
+# the AWS-managed addon uses by default. Mirrors the EFS CSI driver's IRSA
+# wiring in efs_csi.tf so future maintainers see the same pattern twice.
+# -----------------------------------------------------------------------------
+data "aws_iam_policy_document" "ebs_csi_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ebs_csi" {
+  name               = "${local.name_prefix}-ebs-csi"
+  assume_role_policy = data.aws_iam_policy_document.ebs_csi_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi" {
+  role       = aws_iam_role.ebs_csi.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
 
 # -----------------------------------------------------------------------------
