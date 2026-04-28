@@ -110,6 +110,18 @@ resource "aws_iam_role_policy_attachment" "node_ecr_read" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+# The aws-ebs-csi-driver addon authenticates as the node IAM role when no
+# service_account_role_arn (IRSA) is provided. Without this policy the CSI
+# controller pods get AccessDenied on every EC2 EBS API call, the addon
+# never reaches ACTIVE, and `terraform apply` times out at 20 min waiting
+# for the addon. Cleanest long-term fix is IRSA, but attaching the policy
+# to the node role is one line and matches what most managed-node-group
+# guides recommend for this scale.
+resource "aws_iam_role_policy_attachment" "node_ebs_csi" {
+  role       = aws_iam_role.eks_node.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
 resource "aws_eks_node_group" "this" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "${local.name_prefix}-ng"
