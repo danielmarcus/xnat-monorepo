@@ -97,6 +97,11 @@ jobs:
           files: '**/build/test-results/test/*.xml'
           comment_title: 'Test Results'
           check_name: 'Unit Test Results'
+          # Some XNAT tests capture 50k+ lines of Spring/Hibernate startup
+          # output into the JUnit <system-out> CData block, which exceeds
+          # libxml2's default 10 MB text-length limit. large_files=true
+          # enables XML_PARSE_HUGE so the action can read them.
+          large_files: true
 
       # -----------------------------------------------------------------------
       # 7. Upload test reports for manual inspection on failure

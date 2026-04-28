@@ -194,6 +194,8 @@ jobs:
           files: smoke-test-results-${{ matrix.suite.name }}.xml
           check_name: 'Smoke Test Results (${{ matrix.suite.name }})'
           comment_title: 'Smoke Test Results (${{ matrix.suite.name }})'
+          # Match pr-validation.yml — defensive against future log growth.
+          large_files: true
 
       # -----------------------------------------------------------------------
       # 9. On failure: capture container logs + upload diagnostics
