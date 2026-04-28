@@ -1,14 +1,14 @@
-# Cloud Deploy Workflow
+# Cloud Deploy Workflow (single-EC2)
 #
-# Triggered automatically after a successful smoke-test run on the main branch.
-# Uses Terraform to provision/update cloud infrastructure, deploys the WAR,
-# and runs a final smoke-test pass against the live cloud endpoint.
-#
-# The workflow is skipped gracefully when AWS credentials are absent, so it is
-# safe to keep in the repository even before cloud infrastructure is set up.
+# Manual-dispatch only. The auto-trigger off Smoke Tests was retired once the
+# EKS path (eks-deploy.yml) became the production-shaped target — every merge
+# was redeploying the single-EC2 staging box even when the change didn't
+# touch the deploy surface, burning ~10 min/run for low signal. Use this
+# workflow when you want a fresh single-EC2 deploy as a known-working
+# baseline; let eks-deploy.yml carry the production-shaped path.
 #
 # The deployed environment is intentionally NOT torn down after the job so
-# that the running instance can serve as a staging/QA environment.
+# that the running instance can serve as a cheap always-on staging/QA URL.
 #
 # Required secrets (all optional — workflow skips gracefully when absent):
 #   AWS_ACCESS_KEY_ID      — AWS access key for Terraform + deployment
@@ -26,12 +26,7 @@
 name: Cloud Deploy
 
 on:
-  workflow_dispatch:  # Allow manual triggering
-  workflow_run:
-    workflows:
-      - "Smoke Tests"
-    types:
-      - completed
+  workflow_dispatch:  # Manual triggering only — see header comment.
 
 permissions:
   contents: read
@@ -50,11 +45,6 @@ jobs:
   preflight:
     name: Preflight Checks
     runs-on: ubuntu-latest
-    # Run on manual dispatch or successful smoke tests on main.
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main')
 
     outputs:
       should-deploy: ${{ steps.check-creds.outputs.proceed }}
