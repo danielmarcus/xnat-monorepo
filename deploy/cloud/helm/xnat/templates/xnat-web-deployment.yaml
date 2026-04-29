@@ -46,6 +46,23 @@ spec:
                 sleep 2
               done
 
+        # Bootstrap the directory tree the WAR expects at /data/xnat/home/*.
+        # The Dockerfile creates these at build time, but the config PVC is
+        # mounted at /data/xnat/home and overlays everything below — on a
+        # fresh PVC the dirs vanish and Tomcat fails WAR deployment with
+        # "The directory specified by base and internal path
+        # [/data/xnat/home/plugins]/[] does not exist." idempotent on
+        # subsequent restarts (mkdir -p is a no-op when dirs exist).
+        - name: bootstrap-xnat-home
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - mkdir -p /data/xnat/home/plugins /data/xnat/home/logs /data/xnat/home/work /data/xnat/home/config
+          volumeMounts:
+            - name: config
+              mountPath: /data/xnat/home
+
       containers:
         - name: xnat
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
