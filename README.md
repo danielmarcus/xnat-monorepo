@@ -78,14 +78,49 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for full local setup instructions.
 
 Two deployment targets coexist; pick the one that matches your environment.
 
-| Target | Path | When to use |
-|---|---|---|
-| **Single AWS EC2** | `deploy/cloud/terraform/` + `deploy/cloud/scripts/deploy.sh` | Staging / reference deployment. One instance, runs the same Compose stack as local dev. See [ADR 0004](docs/adr/0004-cloud-deployment.md). |
-| **Amazon EKS** | `deploy/cloud/terraform/eks/` + `deploy/cloud/helm/xnat/` + `deploy/cloud/scripts/eks-deploy.sh` | Managed Kubernetes with RDS Postgres + EFS-backed archive. See [ADR 0006](docs/adr/0006-eks-deployment-target.md) and the [Helm chart README](deploy/cloud/helm/xnat/README.md). |
+| Target | Path | Status | When to use |
+|---|---|---|---|
+| **Single AWS EC2** | `deploy/cloud/terraform/` + `deploy/cloud/scripts/deploy.sh` | Live; manual-dispatch (`Cloud Deploy` workflow) | Reference / dev-staging. One instance, runs the same Compose stack as local dev. See [ADR 0004](docs/adr/0004-cloud-deployment.md). |
+| **Amazon EKS** | `deploy/cloud/terraform/eks/` + `deploy/cloud/helm/xnat/` + `deploy/cloud/scripts/eks-deploy.sh` | Live; manual-dispatch (`EKS Deploy` workflow) | Managed Kubernetes with RDS Postgres + EFS-backed archive. See [ADR 0006](docs/adr/0006-eks-deployment-target.md) and the [Helm chart README](deploy/cloud/helm/xnat/README.md). |
 
 Both deploy the same WAR artifact; they're independent (one stalling doesn't
 block the other). Pick EC2 for reference / dev-staging; pick EKS when you need
 a managed control plane and the option to scale RDS / EFS independently.
+
+### EKS quick start
+
+First run (cluster does not yet exist):
+
+```sh
+# Prereqs (one-time, AWS account-level): an OIDC IdP for GitHub trusted by IAM,
+# an IAM role assumable by repo:danielmarcus/xnat-monorepo:* with EKS + RDS +
+# EFS + EC2 + IAM + S3 permissions. See ADR 0006 "Bring-up Notes" for the
+# minimum policy set we landed on.
+
+# Set the GitHub secrets listed in CI_SECRETS.md → "EKS Deploy":
+#   AWS_ROLE_TO_ASSUME, EKS_DB_PASSWORD, TF_BACKEND_BUCKET, TF_BACKEND_REGION
+
+# Trigger the workflow with apply_terraform=true (≈ 25 min cold provision).
+gh workflow run eks-deploy.yml -f apply_terraform=true
+```
+
+Subsequent deploys (image rebuild + helm upgrade only, ≈ 5–7 min):
+
+```sh
+gh workflow run eks-deploy.yml          # apply_terraform defaults to false
+```
+
+After the run, the public hostname is on the LoadBalancer Service:
+
+```sh
+aws eks update-kubeconfig --region us-east-2 --name xnat-staging
+kubectl get svc -n default xnat-web -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+```
+
+ADR 0006's "Bring-up Notes" captures the bugs encountered during first live
+deploy — IRSA for the EBS CSI driver, IMDS hop-limit interactions, ConfigMap
+property-key prefix mismatches, PVC overlay clobbering — worth skimming before
+adapting the chart for new environments.
 
 ---
 

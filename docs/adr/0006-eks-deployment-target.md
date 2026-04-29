@@ -211,6 +211,186 @@ Helm owns the application surface; the boundary is clean.
 
 ---
 
+## Bring-up Notes / Common Pitfalls
+
+This ADR was written before the deploy was exercised end-to-end. The first
+live bring-up surfaced ~10 bugs across IAM, the chart, and the Dockerfile —
+captured here so the next environment doesn't re-discover them.
+
+### IAM — what AWS-managed policies don't cover
+
+The IAM role `AWS_ROLE_TO_ASSUME` (the one assumed via OIDC by the GitHub
+Actions workflow) needs more than the obvious managed policies imply.
+
+| Policy / permission | Why | Found by |
+|---|---|---|
+| `AmazonEC2FullAccess` (not `AmazonVPCFullAccess` alone) | `ec2:DescribeAddressesAttribute` was added to EC2 in 2022; older `AmazonVPCFullAccess` doesn't include it. Terraform's EIP refresh hits it. | First live `terraform apply` got `UnauthorizedOperation: ec2:DescribeAddressesAttribute`. |
+| `eks:*` (inline) | **No AWS-managed policy grants `eks:CreateCluster` to a caller.** `AmazonEKSClusterPolicy` is for the cluster *service* role (assumed by EKS itself), not the IAM principal that creates the cluster. | First `eks_create_cluster` call returned `AccessDeniedException`. |
+| `iam:PassRole`, `iam:CreateOpenIDConnectProvider`, etc. | Terraform creates IRSA roles, OIDC providers, and passes service roles to EKS. `IAMFullAccess` covers it. | Implied. |
+| **S3** on the Terraform state bucket | The state bucket is read on every plan/apply (`HeadObject` on the state key). 403s here look like NoSuchBucket because S3 returns 403 when the caller lacks `s3:ListBucket`. | First `terraform init` succeeded but plan failed with `403 Forbidden: HeadObject xnat/eks/terraform.tfstate`. |
+
+The minimum-managed-policy set we converged on:
+`AmazonEC2FullAccess`, `AmazonRDSFullAccess`, `AmazonElasticFileSystemFullAccess`,
+`AmazonEC2ContainerRegistryFullAccess`, `AmazonS3FullAccess`, `IAMFullAccess`,
+plus an inline `eks-management` policy granting `eks:*`.
+
+`AmazonEKSWorkerNodePolicy`, `AmazonEKSServicePolicy`, `AmazonEKSClusterPolicy`,
+`AmazonEKS_CNI_Policy` are attached **on the resources Terraform creates** (the
+node-group role, the cluster service role) — they don't go on the deployer role.
+
+### Node IAM role — `AmazonEBSCSIDriverPolicy`
+
+Without IRSA, the EBS CSI driver inherits credentials from the node's IAM role.
+The standard `AmazonEKSWorkerNodePolicy` + `AmazonEKS_CNI_Policy` +
+`AmazonEC2ContainerRegistryReadOnly` set does **not** include
+`AmazonEBSCSIDriverPolicy`. The CSI controller's `CreateVolume` /
+`AttachVolume` calls fail silently — no `addon.health.issues` reported, the
+add-on stays in `CREATING` until Terraform's 20-minute timeout. (`eks.tf:108`
+attaches the policy.)
+
+### IRSA for EBS CSI driver — IMDS hop-limit
+
+Even with the node-role policy attached, the AWS-managed
+`aws-ebs-csi-driver` add-on still failed to reach `ACTIVE` on first try.
+Root cause: EKS managed-node-group launch templates default to
+`http-put-response-hop-limit = 1`, so **pods cannot reach IMDSv2** (only
+the host can). The CSI controller pods got *no* AWS credentials at all,
+not even AccessDenied — the add-on stayed in `CREATING` indefinitely.
+
+Fix: bind the addon's controller service account to a dedicated IRSA role
+via `service_account_role_arn` so it gets credentials from STS via the
+OIDC token, bypassing IMDS entirely. This is the same pattern `efs_csi.tf`
+already uses for the EFS CSI driver. See `eks.tf:179-237`.
+
+This is the canonical "addon stuck in CREATING with empty health.issues"
+failure mode, and it took 3 PRs to land cleanly.
+
+### Helm chart — fullname helper vs `HELM_RELEASE_NAME=xnat`
+
+`xnat.fullname` (the standard Helm helper in `_helpers.tpl`) collapses to
+just `Release.Name` when the release name contains the chart name. With
+the default `HELM_RELEASE_NAME=xnat` and `chart.name=xnat`:
+
+| Template expression | Renders to |
+|---|---|
+| `{{ include "xnat.fullname" . }}` | `xnat` (not `xnat-xnat`) |
+| `{{ ... }}-web` | `xnat-web` |
+
+`eks-deploy.sh` originally looked for `${HELM_RELEASE_NAME}-xnat` —
+`xnat-xnat`, which doesn't exist — so the post-`helm upgrade` `kubectl
+rollout status` and Service hostname capture both 404'd. The script now
+mirrors the helper's logic in shell to compute the actual `FULLNAME`.
+
+### ConfigMap property keys — `xnat.` prefix is wrong
+
+XNAT looks for `datasource.driver`, `datasource.url`, etc. — without the
+`xnat.` prefix. The chart's ConfigMap originally rendered `xnat.datasource.X`
+keys (matching the `xnat.home` key, which IS the right shape). Result:
+XNAT loaded the file, found no DB config, Spring's DataSource bean wiring
+failed, the WAR's listeners failed to start with the unhelpful "One or
+more listeners failed to start" message.
+
+Compare against the working docker-compose `xnat-conf.properties`: every
+datasource key has no prefix.
+
+### ConfigMap password — env-var placeholder doesn't work
+
+The chart's first design rendered `# password is set at runtime via
+XNAT_DATASOURCE_PASSWORD env var` (a comment, not a property) on the
+assumption Spring's property loader would resolve `${ENV_VAR}` placeholders
+in `xnat-conf.properties`. It does not. XNAT's property loader reads the
+file as literal text. The password has to be rendered into the file.
+`eks-deploy.sh` passes `--set "database.password=${EKS_DB_PASSWORD}"`;
+helm releases are stored as Secrets since v3, so this doesn't widen the
+blast radius.
+
+### PVC overlay clobbering
+
+`Dockerfile.k8s` runs `RUN mkdir -p ${XNAT_HOME}/{config,logs,plugins,work}`
+at image build time. The chart mounts a fresh empty `gp3` PVC at
+`/data/xnat/home`, which **overlays** the image's contents — the four
+build-time dirs vanish on first cold boot. Tomcat's `StandardRoot` then
+fails the WAR with:
+
+```
+The directory specified by base and internal path
+[/data/xnat/home/plugins]/[] does not exist.
+```
+
+Fix: a `bootstrap-xnat-home` init container that `mkdir -p`s the four
+dirs on the PVC before the main container starts. Idempotent; only first
+boot pays the cost.
+
+### Dockerfile.k8s build context
+
+`eks-deploy.sh` builds with `docker build --file Dockerfile.k8s .` from
+the repo root, so `COPY ${WAR_PATH}` (`apps/web/build/libs/...`) works.
+But the helper-script COPYs (`make-xnat-config.sh`, `wait-for-postgres.sh`,
+`jakarta-migrate-and-start.sh`) used **bare filenames**, only valid when
+the docker-compose context is `./xnat`. Fix: prefix them with
+`deploy/docker-compose/xnat/`.
+
+### Runtime entrypoint — bypass on K8s
+
+The image's default `CMD ["jakarta-migrate-and-start.sh"]` chains into
+`wait-for-postgres.sh` which has docker-compose-isms baked in:
+
+```sh
+psql -h xnat-db ...   # docker-compose service name; doesn't resolve in K8s
+```
+
+…plus reads `PGPASSWORD` baked at *image build time*. Both wrong on K8s.
+The `wait-for-db` init container already gates on Postgres TCP via
+`nc -z`, so the runtime check is doubly redundant. Chart overrides
+`command: ["/usr/local/tomcat/bin/catalina.sh"]` to skip both shell scripts.
+
+### jakartaee-migration timing
+
+The runtime entrypoint script does `jakartaee-migration` against ~250 jars
+in the WAR on every cold start. On a t3.medium with no CPU limits this is
+38s; on EKS gp3 + a 2-CPU pod limit it ran for 5–10 min, long enough that
+the liveness probe killed the container before Tomcat ever bound 8080.
+
+Fix: pre-migrate at image *build* time (`Dockerfile.k8s` runs the migration
+tool against `webapps/ROOT.war` and touches the runtime sentinel). The
+runtime sentinel-skip then fires immediately. Cost shifts from per-pod-
+cold-start to per-image-build.
+
+### Probe initial delays
+
+Even with build-time migration, fresh deploys still pay Hibernate
+`hbm2ddl=update` schema-sync on RDS (1–3 min), Spring context init (1–2
+min), and EFS PVC first-mount latency. Defaults of `livenessProbe.initialDelaySeconds=300`
+were too tight; bumped to **600s**. Helm `--wait --timeout` was 15m;
+bumped to **25m**. Both are first-deploy ceilings — subsequent rolling
+deploys don't need either.
+
+### kubectl access from a laptop
+
+The IAM principal that calls `CreateCluster` (the GitHub Actions OIDC
+role) gets cluster-admin via `system:masters` automatically. Your local
+IAM user doesn't, by default. To debug from a laptop, either add an EKS
+**Access Entry** (the modern API-based path) or update the cluster's
+`aws-auth` ConfigMap (the legacy path):
+
+```sh
+aws eks update-cluster-config --region us-east-2 --name xnat-staging \
+  --access-config authenticationMode=API_AND_CONFIG_MAP
+
+aws eks create-access-entry --region us-east-2 --cluster-name xnat-staging \
+  --principal-arn $(aws sts get-caller-identity --query Arn --output text)
+
+aws eks associate-access-policy --region us-east-2 --cluster-name xnat-staging \
+  --principal-arn $(aws sts get-caller-identity --query Arn --output text) \
+  --access-scope type=cluster \
+  --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+```
+
+This is worth doing **before** the first dispatch — much easier to debug
+a stuck pod with kubectl than via diagnostic-artifact archaeology.
+
+---
+
 ## Related Decisions
 
 - ADR 0001: Monorepo structure
