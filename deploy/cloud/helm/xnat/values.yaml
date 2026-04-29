@@ -54,12 +54,14 @@ database:
   # why the previous "secret env var only" pattern silently failed auth.
   password: ""
 
-  # Name of an existing Secret with key `password`. Lets the operator
-  # rotate the password without a chart rerender. eks-deploy.sh creates
-  # this secret from the EKS_DB_PASSWORD CI secret. Currently used to
-  # set XNAT_DATASOURCE_PASSWORD in the pod env (legacy / docker-compose
-  # parity); xnat-conf.properties takes precedence.
-  existingSecretName: xnat-db-credentials
+  # Name of an existing Secret with key `password`. Only consulted by the
+  # in-cluster Postgres path (postgres-statefulset.yaml uses
+  # xnat.dbSecretName for POSTGRES_PASSWORD). The xnat container itself
+  # does NOT read this Secret — the password is rendered into
+  # xnat-conf.properties via .Values.database.password instead. Leave
+  # empty for the EKS/RDS path; secret-db.yaml will auto-generate a
+  # Secret if inClusterPostgres.enabled=true and this is empty.
+  existingSecretName: ""
 
 # -----------------------------------------------------------------------------
 # Optional in-cluster Postgres for environments without RDS access (dev/CI).

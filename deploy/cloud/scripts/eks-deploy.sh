@@ -112,19 +112,17 @@ docker build \
 docker push "${IMAGE_TAG}"
 
 # -----------------------------------------------------------------------------
-# 4. Create/refresh DB credentials Secret out of band
+# 4. Ensure namespace exists
 #
-# Done outside Helm so the password never lands in the chart manifest. Naming
-# matches database.existingSecretName in values.yaml.
+# Earlier versions of this script also created an xnat-db-credentials Secret
+# from EKS_DB_PASSWORD here, on the assumption the chart would mount it via
+# valueFrom.secretKeyRef in the deployment. After the property-keys fix in
+# PR #22 the password is rendered into xnat-conf.properties (via
+# `--set database.password=...` below), so the Secret was never read.
+# Removed to drop dead state.
 # -----------------------------------------------------------------------------
-echo "==> 4/6 ensure DB credentials Secret"
+echo "==> 4/6 ensure namespace"
 kubectl create namespace "${HELM_NAMESPACE}" --dry-run=client -o yaml \
-  | kubectl apply -f -
-
-kubectl create secret generic xnat-db-credentials \
-  --namespace "${HELM_NAMESPACE}" \
-  --from-literal=password="${EKS_DB_PASSWORD}" \
-  --dry-run=client -o yaml \
   | kubectl apply -f -
 
 # -----------------------------------------------------------------------------
@@ -140,9 +138,9 @@ HELM_ARGS=(
   --set "database.mode=rds"
   --set "inClusterPostgres.enabled=false"
   # XNAT reads datasource.password from xnat-conf.properties, not from the
-  # pod's env, so the password has to be rendered into the ConfigMap.
-  # `--set` puts it in the helm release manifest, which is itself a Secret
-  # since Helm 3 — same blast radius as the existing xnat-db-credentials.
+  # pod's env. `--set` puts it in the helm release manifest, which is itself
+  # a Secret since Helm 3, so the password is in a Secret either way — same
+  # blast radius as a separately-managed xnat-db-credentials Secret would be.
   --set "database.password=${EKS_DB_PASSWORD}"
   --wait
   # 25 min — first-time deploy needs RDS schema sync inside the pod plus

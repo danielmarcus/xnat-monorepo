@@ -13,8 +13,8 @@ The DB password IS rendered into this file because XNAT's property
 loader doesn't perform `${ENV_VAR}` placeholder substitution against
 process env; the literal string would survive into the JDBC config
 and auth would fail. Helm releases are stored as Secrets since v3,
-so embedding the password here doesn't change the blast radius —
-anyone with namespace RBAC could read xnat-db-credentials anyway.
+so embedding the password here doesn't change the blast radius — the
+rendered ConfigMap is a Secret either way.
 */}}
 apiVersion: v1
 kind: ConfigMap

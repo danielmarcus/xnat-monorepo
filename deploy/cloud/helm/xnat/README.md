@@ -41,24 +41,35 @@ When using the matching terraform module, `eks-deploy.sh` injects these via `--s
 | `image.tag` | Git SHA of the commit being deployed |
 | `database.host` | `terraform output -raw rds_endpoint` |
 
-The DB password is **not** rendered into the chart manifest. `eks-deploy.sh`
-creates a Secret named `xnat-db-credentials` outside Helm using the
-`EKS_DB_PASSWORD` GitHub secret; the Deployment references it via env.
+The DB password is rendered into `xnat-conf.properties` via
+`--set database.password=$EKS_DB_PASSWORD`. XNAT's Spring config reads the
+password from the properties file at startup; env-var placeholder
+substitution doesn't apply there, so the password has to be in the
+file as a literal. Helm releases are stored as Kubernetes Secrets
+since v3, so the rendered manifest never sits in plaintext.
+
+(Earlier versions of the chart created an `xnat-db-credentials` Secret
+outside Helm and referenced it via `valueFrom.secretKeyRef` env var,
+on the assumption Spring would resolve `${XNAT_DATASOURCE_PASSWORD}`
+in the properties file. It doesn't — that pattern silently failed
+auth, so the Secret + env var were dropped for the RDS path.)
 
 ## Finding the assigned ELB hostname
 
 With `service.type: LoadBalancer` (default), AWS provisions a classic ELB
-and reports the hostname back to the Service status:
+and reports the hostname back to the Service status. With the default
+release name `xnat`, the chart's `xnat.fullname` helper collapses to just
+`xnat`, so the Service is named `xnat-web`:
 
 ```bash
 kubectl get svc -l app.kubernetes.io/instance=xnat -o wide
 # Or directly:
-kubectl get svc xnat-xnat-web -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+kubectl get svc xnat-web -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 ```
 
 Point your DNS or a curl test at that hostname:
 ```bash
-curl http://$(kubectl get svc xnat-xnat-web -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')/xapi/siteConfig/buildInfo
+curl http://$(kubectl get svc xnat-web -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')/xapi/siteConfig/buildInfo
 ```
 
 ## Switching from RDS to in-cluster Postgres
@@ -70,12 +81,14 @@ helm upgrade --install xnat . \
   --set image.repository=$ECR_URL --set image.tag=$GIT_SHA \
   --set database.mode=inCluster \
   --set inClusterPostgres.enabled=true \
-  --set database.existingSecretName=
+  --set database.password=mychosenpassword
 ```
 
-Clearing `existingSecretName` lets the chart auto-generate the password and
-materialise it as a Secret. Reusing the password across upgrades is handled
-via `lookup`, so subsequent `helm upgrade` calls don't rotate it.
+`secret-db.yaml` auto-generates a Secret holding the password (used by the
+in-cluster Postgres StatefulSet's `POSTGRES_PASSWORD`); reusing the password
+across upgrades is handled via `lookup` so `helm upgrade` doesn't rotate it.
+Set `database.password` explicitly to the same value the chart renders
+into `xnat-conf.properties`.
 
 ## Switching to ALB Ingress
 
