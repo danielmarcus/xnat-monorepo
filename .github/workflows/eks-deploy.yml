@@ -245,8 +245,25 @@ jobs:
             > /tmp/k8s-diagnostics/pod-describe.txt 2>&1 || true
           kubectl logs -l app.kubernetes.io/instance=xnat --tail=500 \
             > /tmp/k8s-diagnostics/pod-logs.txt 2>&1 || true
+          kubectl logs -l app.kubernetes.io/instance=xnat --tail=500 --previous \
+            > /tmp/k8s-diagnostics/pod-logs-previous.txt 2>&1 || true
           kubectl get events --sort-by='.lastTimestamp' \
             > /tmp/k8s-diagnostics/events.txt 2>&1 || true
+
+          # Tomcat writes the actual stack traces (Spring listener errors,
+          # WAR deploy failures, JDBC auth failures) to per-context log
+          # files inside the container, NOT to stdout. Without these,
+          # "One or more listeners failed to start" is all we ever see.
+          POD=$(kubectl get pod -l app.kubernetes.io/instance=xnat,app.kubernetes.io/component=web \
+                  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+          if [[ -n "$POD" ]]; then
+            kubectl exec "$POD" -c xnat -- ls /usr/local/tomcat/logs/ \
+              > /tmp/k8s-diagnostics/tomcat-logs-listing.txt 2>&1 || true
+            for f in catalina localhost host-manager manager; do
+              kubectl exec "$POD" -c xnat -- sh -c "cat /usr/local/tomcat/logs/${f}*.log 2>/dev/null" \
+                > "/tmp/k8s-diagnostics/tomcat-${f}.log" 2>&1 || true
+            done
+          fi
 
       - name: Upload diagnostics
         if: failure()

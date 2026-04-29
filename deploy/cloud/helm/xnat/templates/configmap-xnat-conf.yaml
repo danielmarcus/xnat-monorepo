@@ -1,9 +1,20 @@
 {{/*
 xnat-conf.properties — the file XNAT reads at startup (mounted at
-/data/xnat/home/config/xnat-conf.properties). Contains the JDBC URL plus
-a small handful of overrides. The DB password is NOT in here — it's read
-from the secret-mounted env var XNAT_DATASOURCE_PASSWORD which the
-deployment template references in the JDBC URL via env-substitution.
+/data/xnat/home/config/xnat-conf.properties).
+
+Property names mirror the docker-compose deploy's working file
+(deploy/docker-compose/xnat-conf/xnat-conf.properties). XNAT looks
+for keys WITHOUT the `xnat.` prefix (datasource.url, not
+xnat.datasource.url) — getting that wrong silently breaks DataSource
+bean wiring and Tomcat fails the WAR's listeners with the
+unhelpful "One or more listeners failed to start" message.
+
+The DB password IS rendered into this file because XNAT's property
+loader doesn't perform `${ENV_VAR}` placeholder substitution against
+process env; the literal string would survive into the JDBC config
+and auth would fail. Helm releases are stored as Secrets since v3,
+so embedding the password here doesn't change the blast radius —
+anyone with namespace RBAC could read xnat-db-credentials anyway.
 */}}
 apiVersion: v1
 kind: ConfigMap
@@ -14,15 +25,18 @@ metadata:
 data:
   xnat-conf.properties: |
     # ----- Database -----
-    xnat.datasource.driver=org.postgresql.Driver
-    xnat.datasource.url=jdbc:postgresql://{{ include "xnat.databaseHost" . }}:{{ .Values.database.port }}/{{ .Values.database.name }}
-    xnat.datasource.username={{ .Values.database.username }}
-    # password is set at runtime via XNAT_DATASOURCE_PASSWORD env var
+    datasource.driver=org.postgresql.Driver
+    datasource.url=jdbc:postgresql://{{ include "xnat.databaseHost" . }}:{{ .Values.database.port }}/{{ .Values.database.name }}
+    datasource.username={{ .Values.database.username }}
+    datasource.password={{ .Values.database.password }}
 
     # ----- Hibernate -----
-    hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+    hibernate.dialect=org.hibernate.dialect.PostgreSQL9Dialect
     hibernate.hbm2ddl.auto=update
     hibernate.show_sql=false
+    hibernate.cache.use_second_level_cache=true
+    hibernate.cache.use_query_cache=true
 
-    # ----- XNAT runtime -----
-    xnat.home=/data/xnat/home
+    # ----- Spring multipart limits — match docker-compose -----
+    spring.http.multipart.max-file-size=1073741824
+    spring.http.multipart.max-request-size=1073741824
