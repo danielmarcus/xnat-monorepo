@@ -68,17 +68,15 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           # Bypass the image's default CMD (jakarta-migrate-and-start.sh ->
-          # wait-for-postgres.sh -> catalina.sh) on K8s because:
+          # wait-for-postgres.sh -> catalina.sh) on K8s. Two reasons:
           #   1. The WAR is pre-migrated at image build time, sentinel touched —
           #      jakarta-migrate-and-start.sh would just sentinel-skip and proxy
           #      to wait-for-postgres.sh anyway.
           #   2. wait-for-postgres.sh hardcodes `-h xnat-db` (the docker-compose
           #      service name) and reads PGPASSWORD baked at image build time.
-          #      Both are wrong in K8s: the host is the RDS endpoint and the
-          #      password lives in the xnat-db-credentials Secret.
-          #   3. The wait-for-db init container above already gates pod
-          #      startup on Postgres TCP reachability via `nc -z`, so the
-          #      runtime wait inside wait-for-postgres.sh is redundant.
+          #      The wait-for-db init container above already gates pod startup
+          #      on Postgres TCP reachability via `nc -z`, so the runtime wait
+          #      is redundant.
           # Net: skip both shell scripts, run Tomcat directly.
           command: ["/usr/local/tomcat/bin/catalina.sh"]
           args: ["run"]
@@ -89,13 +87,16 @@ spec:
           env:
             - name: CATALINA_OPTS
               value: "{{ .Values.javaOpts }} -Dxnat.home=/data/xnat/home -Dxnat.config=/data/xnat/home/config/xnat-conf.properties"
+            # XNAT_DATASOURCE_USERNAME is set for parity with docker-compose;
+            # XNAT itself reads datasource.username from xnat-conf.properties,
+            # so this env var is unused at runtime under the bypassed entrypoint.
             - name: XNAT_DATASOURCE_USERNAME
               value: {{ .Values.database.username | quote }}
-            - name: XNAT_DATASOURCE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "xnat.dbSecretName" . }}
-                  key: password
+            # NOTE: There is intentionally NO XNAT_DATASOURCE_PASSWORD env var.
+            # XNAT reads datasource.password from xnat-conf.properties (rendered
+            # from .Values.database.password by the ConfigMap), and the
+            # bypassed entrypoint scripts that used to consume PGPASSWORD don't
+            # run on K8s. Setting an env var from a Secret here was dead code.
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
