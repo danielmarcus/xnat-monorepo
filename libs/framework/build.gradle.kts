@@ -108,6 +108,18 @@ dependencies {
     compileOnly("org.kohsuke.metainf-services:metainf-services:1.11")
     annotationProcessor("org.kohsuke.metainf-services:metainf-services:1.11")
 
+    // --- Test annotation processors ---
+    // SimpleBean (under src/test/java) is annotated with @XnatMixIn. The
+    // processor that turns @XnatMixIn into META-INF/xnat/serializers/*.
+    // properties files lives in this module's own main code, so we need
+    // sourceSets.main.output on the test annotation-processor path to
+    // make it discoverable when compileTestJava runs. Without this,
+    // testAnnotatedMixIn fails: no mixin properties file is generated,
+    // SerializerService can't register SimpleBeanMixIn, the @JsonIgnore
+    // never fires, and `ignoredField` shows up in the JSON map.
+    testAnnotationProcessor(sourceSets.main.get().output)
+    testAnnotationProcessor("org.kohsuke.metainf-services:metainf-services:1.11")
+
     // --- Provided ---
     compileOnly(libs.h2)
 
