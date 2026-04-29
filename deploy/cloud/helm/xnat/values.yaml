@@ -47,9 +47,18 @@ database:
   name: xnat
   username: xnat
 
+  # Password used to render datasource.password into xnat-conf.properties.
+  # Set via --set on `helm upgrade` (eks-deploy.sh passes EKS_DB_PASSWORD).
+  # XNAT's Spring config reads the password from the properties file
+  # directly — env-var placeholder substitution doesn't apply, which is
+  # why the previous "secret env var only" pattern silently failed auth.
+  password: ""
+
   # Name of an existing Secret with key `password`. Lets the operator
   # rotate the password without a chart rerender. eks-deploy.sh creates
-  # this secret from the EKS_DB_PASSWORD CI secret.
+  # this secret from the EKS_DB_PASSWORD CI secret. Currently used to
+  # set XNAT_DATASOURCE_PASSWORD in the pod env (legacy / docker-compose
+  # parity); xnat-conf.properties takes precedence.
   existingSecretName: xnat-db-credentials
 
 # -----------------------------------------------------------------------------

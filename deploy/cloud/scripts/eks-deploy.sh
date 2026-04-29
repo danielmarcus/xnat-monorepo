@@ -139,6 +139,11 @@ HELM_ARGS=(
   --set "database.host=${RDS_ENDPOINT}"
   --set "database.mode=rds"
   --set "inClusterPostgres.enabled=false"
+  # XNAT reads datasource.password from xnat-conf.properties, not from the
+  # pod's env, so the password has to be rendered into the ConfigMap.
+  # `--set` puts it in the helm release manifest, which is itself a Secret
+  # since Helm 3 — same blast radius as the existing xnat-db-credentials.
+  --set "database.password=${EKS_DB_PASSWORD}"
   --wait
   # 25 min — first-time deploy needs RDS schema sync inside the pod plus
   # all the cold-start stuff covered by the readiness/liveness initial
