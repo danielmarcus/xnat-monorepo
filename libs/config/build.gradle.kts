@@ -47,3 +47,12 @@ dependencies {
     testImplementation(libs.commons.io)
     testImplementation(libs.slf4j.simple)
 }
+
+// ConfigPlatformTests.testLargeConfigFile constructs a String of
+// MAX_FILE_LENGTH + 1 chars (~2 GB heap, since Java chars are 2 bytes)
+// to exercise the size-cap check in DefaultConfigService. The convention
+// plugin's default maxHeapSize=2g leaves no headroom, OOM. Override
+// just for this module.
+tasks.withType<Test>().configureEach {
+    maxHeapSize = "4g"
+}
