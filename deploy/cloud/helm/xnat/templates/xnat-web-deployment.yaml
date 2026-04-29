@@ -50,6 +50,21 @@ spec:
         - name: xnat
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Bypass the image's default CMD (jakarta-migrate-and-start.sh ->
+          # wait-for-postgres.sh -> catalina.sh) on K8s because:
+          #   1. The WAR is pre-migrated at image build time, sentinel touched —
+          #      jakarta-migrate-and-start.sh would just sentinel-skip and proxy
+          #      to wait-for-postgres.sh anyway.
+          #   2. wait-for-postgres.sh hardcodes `-h xnat-db` (the docker-compose
+          #      service name) and reads PGPASSWORD baked at image build time.
+          #      Both are wrong in K8s: the host is the RDS endpoint and the
+          #      password lives in the xnat-db-credentials Secret.
+          #   3. The wait-for-db init container above already gates pod
+          #      startup on Postgres TCP reachability via `nc -z`, so the
+          #      runtime wait inside wait-for-postgres.sh is redundant.
+          # Net: skip both shell scripts, run Tomcat directly.
+          command: ["/usr/local/tomcat/bin/catalina.sh"]
+          args: ["run"]
           ports:
             - name: http
               containerPort: 8080
