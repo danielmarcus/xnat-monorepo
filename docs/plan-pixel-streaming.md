@@ -60,12 +60,29 @@ The tricky paths are the ones in `dicom-edit6` and `dicom-image-utils` that curr
 ## Phase ordering and rationale
 
 1. **Phase A — Audit** (gates everything; no code changes)
-2. **Phase B — Switch metadata-only paths to `IncludeBulkData.URI`** (high-impact, low-risk)
-3. **Phase C — Refactor pixel-touching paths to per-frame streaming**
-4. **Phase D — Retire `NativeDicomPreCompressor`** (depends on B + C being complete)
-5. **Phase E — Verification + benchmarks**
+2. **Phase B — Test infrastructure** (fixture factory, heap-bound assertions, JMH harness, byte-checksum helpers, lint rule). Phases C–E depend on these helpers being in place.
+3. **Phase C — Switch metadata-only paths to `IncludeBulkData.URI`** (was Phase B in the v1 plan)
+4. **Phase D — Refactor pixel-touching paths to per-frame streaming** (was Phase C)
+5. **Phase E — Retire `NativeDicomPreCompressor`** (was Phase D)
+6. **Phase F — Verification + benchmarks publishing** (was Phase E)
 
-Each phase has a verification gate. Phase B alone delivers most of the heap and concurrency wins; Phase C is needed to make Phase D possible. Phases B and C can land as separate PRs; do not bundle.
+Each phase has a verification gate. Phase C alone delivers most of the heap and concurrency wins; Phase D is needed to make Phase E possible. Phases C and D can land as separate PRs; do not bundle.
+
+## Testing requirements (read before starting any phase)
+
+The v1 of this plan was light on testing — leaned on "existing tests still pass" plus a few hand-described smoke checks. The expanded plan below specifies, **per phase**, the exact new test classes / methods required to pass each verification gate. The categories of test obligation:
+
+- **Unit tests** — for new helper APIs (`DicomReader`, etc.) covering happy paths, edge cases, error modes.
+- **Reference-lifecycle tests** — for `BulkData` references that outlive their parsing context.
+- **Memory-bound tests** — assert heap-allocation deltas using snapshot-around-operation patterns. Helpers in Phase B.
+- **Byte-identity tests** — assert post-archive on-disk file is byte-for-byte (or pixel-for-pixel) identical to input. SHA-256 based.
+- **Concurrency / load tests** — assert peak-heap stays bounded under N parallel ingests.
+- **Behaviour-parity tests** — pre-refactor outputs (captured as SHA-256) must match post-refactor outputs for the same inputs.
+- **External-tool compatibility** — files written post-refactor still readable by tools other than dcm4che.
+- **Backward-compat tests** — files in the archive that pre-date the refactor (some pre-compressed by the old `NativeDicomPreCompressor`, some not) remain readable.
+- **Regression gates** — re-enabled `@Ignore`d tests count as part of the gate; the gate must explicitly check they were un-ignored, not just that the build is green.
+
+**Implementing agent: do NOT mark a phase's gate satisfied unless every test class listed under that phase exists, has the methods specified, and is in the green test report.**
 
 ---
 
@@ -108,7 +125,176 @@ Aim for ~80% confidence on M-vs-P classification. The unsure ones go to Phase C 
 
 ---
 
-# Phase B — Switch metadata-only paths to `IncludeBulkData.URI`
+# Phase B — Test infrastructure
+
+## Goal
+
+Build the helpers, fixtures, and CI hooks that Phases C–E will depend on. Pure additive — no behaviour change to production code. This phase exists because Option 2 of the testing strategy requires every later phase to provide concrete memory and byte-identity assertions, and those need shared scaffolding.
+
+## Deliverables
+
+### B.1 — `LargeDicomFixtureFactory` (in `libs/test`)
+
+Synthetic-DICOM generator so tests don't have to ship multi-GB binary fixtures via Git LFS.
+
+**File:** `libs/test/src/main/java/org/nrg/test/dicom/LargeDicomFixtureFactory.java`
+
+API surface:
+
+```java
+public final class LargeDicomFixtureFactory {
+
+    /** Native (Implicit VR LE) multiframe DICOM. Frame count and dims controllable. */
+    public static File createNativeMultiframe(Path outDir, String name,
+                                              int frameCount, int width, int height,
+                                              int bitsAllocated, int samplesPerPixel) throws IOException;
+
+    /** Convenience: 100 MB native multiframe. */
+    public static File create100MbNative(Path outDir) throws IOException;
+
+    /** Convenience: 2.5 GB native multiframe (exceeds dcm4che's 2 GB byte[] ceiling). */
+    public static File createOver2GbNative(Path outDir) throws IOException;
+
+    /** Encapsulated (JPEG 2000 Lossless) multiframe — for legacy-readback tests. */
+    public static File createJpeg2000Multiframe(Path outDir, String name,
+                                                int frameCount, int width, int height) throws IOException;
+}
+```
+
+Tests for the factory itself:
+
+**File:** `libs/test/src/test/java/org/nrg/test/dicom/LargeDicomFixtureFactoryTest.java`
+
+| Method | Asserts |
+|---|---|
+| `nativeMultiframe_isReadableByDcm4che5()` | factory output parses with `DicomInputStream`; PatientName/StudyInstanceUID/etc. round-trip |
+| `nativeMultiframe_pixelDataMatchesProducedPattern()` | factory writes a known checksum into pixels (e.g. frame N filled with `(byte)(N % 256)`); reading back via dcm4che produces the same bytes |
+| `over2Gb_actuallyExceedsCeiling()` | `Files.size(out) > 2_147_483_647L` |
+| `jpeg2000_isFragmented()` | `Attributes.getValue(Tag.PixelData) instanceof Fragments` |
+
+### B.2 — `HeapBounds` test helper (in `libs/test`)
+
+**File:** `libs/test/src/main/java/org/nrg/test/memory/HeapBounds.java`
+
+```java
+public final class HeapBounds {
+
+    /**
+     * Runs the operation and asserts the resulting heap allocation delta
+     * stays under maxAllocBytes. Forces a System.gc() before and after.
+     * Reads ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().
+     * Throws AssertionError if the delta exceeds the limit.
+     */
+    public static void assertHeapDeltaUnder(long maxAllocBytes, ThrowingRunnable op) throws Exception;
+
+    /** Lambda variant returning a value. */
+    public static <T> T assertHeapDeltaUnderReturning(long maxAllocBytes, ThrowingSupplier<T> op) throws Exception;
+
+    /** For load tests: assert peak heap during op stays under maxPeakBytes (samples every 50 ms). */
+    public static void assertHeapPeakUnder(long maxPeakBytes, ThrowingRunnable op) throws Exception;
+}
+```
+
+Tests:
+
+**File:** `libs/test/src/test/java/org/nrg/test/memory/HeapBoundsTest.java`
+
+| Method | Asserts |
+|---|---|
+| `holdsBoundedAllocations()` | allocating `byte[1MB]` passes a 5 MB bound |
+| `triggersFailureOnOverallocation()` | allocating `byte[100MB]` fails a 5 MB bound with a clear message |
+| `peakSamplerCatchesShortlivedSpikes()` | a 200ms-lived `byte[200MB]` triggers `assertHeapPeakUnder(50_000_000)` |
+| `gcReturnsBaseline()` | after `op` discards its only reference, heap delta returns within 5 MB of baseline |
+
+### B.3 — `Sha256Checksum` helper (in `libs/test`)
+
+For byte-identity assertions on archived DICOMs.
+
+**File:** `libs/test/src/main/java/org/nrg/test/io/Sha256Checksum.java`
+
+```java
+public final class Sha256Checksum {
+
+    /** SHA-256 of the entire file's bytes. */
+    public static String of(File file) throws IOException;
+
+    /** SHA-256 of just the PixelData bytes (every frame, in order). Used for
+     *  pixel-fidelity assertions when headers may have changed (anon, etc). */
+    public static String ofPixelData(File dicomFile) throws IOException;
+}
+```
+
+Tests:
+
+**File:** `libs/test/src/test/java/org/nrg/test/io/Sha256ChecksumTest.java`
+
+| Method | Asserts |
+|---|---|
+| `identicalFilesProduceIdenticalChecksums()` | `of(a) == of(b)` when `Files.copy(a, b)` |
+| `pixelDataIsolated()` | header changes don't change `ofPixelData` if pixels untouched |
+
+### B.4 — JMH benchmark harness
+
+**File:** `apps/web/src/jmh/java/org/nrg/xnat/bench/DicomIngestBenchmark.java`
+
+Gradle plugin: add `id("me.champeau.jmh") version "0.7.2"` to `build-logic/src/main/kotlin/xnat-war-application.gradle.kts`.
+
+Required benchmark methods:
+
+| Method | Measures |
+|---|---|
+| `ingestSmallNative()` | 500 KB native CT slice; avg-time + heap allocation |
+| `ingest100MbNative()` | 100 MB native multiframe; avg-time + heap allocation |
+| `ingest1GbNative()` | 1 GB native multiframe; avg-time + heap allocation |
+| `ingestOver2GbNative()` | 2.5 GB native (Phase B baseline: throws OOM; Phases C–E baseline: succeeds) |
+| `ingestJpeg2000Multiframe()` | encapsulated multiframe, for compression-already-done baseline |
+
+Each benchmark runs the actual `XnatDicomIngestService.ingest(...)` path (or whichever entry point Phase A audit identifies as the primary). Captures heap allocation via `org.openjdk.jmh.profile.GCProfiler`.
+
+Output: `apps/web/build/reports/jmh/results.txt`. Goes into PR descriptions for Phases C/D/E.
+
+### B.5 — Lint rule preventing eager-load reintroduction
+
+After Phase C lands, every `new DicomInputStream(...)` outside `DicomReader` is a regression. Codify that.
+
+**File:** `build-logic/src/main/resources/forbidden-apis-dicom-reader.txt`
+
+```
+# DICOM read paths must use org.nrg.dicom.streaming.DicomReader
+# (added in Phase C of plan-pixel-streaming.md). Direct construction
+# of DicomInputStream re-introduces the eager-load 2GB ceiling.
+@defaultMessage Use org.nrg.dicom.streaming.DicomReader.readMetadata or readHeaderOnly
+org.dcm4che3.io.DicomInputStream <init>(**)
+```
+
+Apply via `de.thetaphi.forbiddenapis` plugin in `xnat-java-library.gradle.kts`. Allow-list `DicomReader.java` itself + benchmark code.
+
+Tests (the lint check itself is enforced as a Gradle task):
+
+| Gate | Asserts |
+|---|---|
+| `./gradlew forbiddenApisMain` passes on a fresh checkout | no `new DicomInputStream` outside the allow-list |
+| Synthetic `Foo.java` with `new DicomInputStream(file)` fails the check | regression-detector works |
+
+### B.6 — CI wiring for memory-regression gate
+
+In `.github/workflows/pr-validation.yml`:
+
+- Add a `Run JMH benchmarks` job (separate from the unit-test job; benchmarks take 5–10 min). Runs `./gradlew jmh`, uploads results as an artifact.
+- Add a comparison step that fails the build if heap allocation per ingest regresses > 20% vs the baseline stored at `apps/web/jmh/baseline.json`. Baseline updated explicitly by an annotated PR; no auto-update.
+
+## Phase B verification gate
+
+- [ ] `libs/test` module exports `LargeDicomFixtureFactory`, `HeapBounds`, `Sha256Checksum` with the API shapes specified.
+- [ ] All four `*Test.java` files for B.1–B.3 exist and pass under `./gradlew :libs:test:test`.
+- [ ] `apps/web/src/jmh/` is wired up; `./gradlew :apps:web:jmh` runs and produces a results file.
+- [ ] `forbiddenApisMain` task exists and runs (will pass trivially since no calls have been migrated yet — that's expected; the rule activates downstream).
+- [ ] CI workflow has the JMH job and uploads artifacts on PR validation.
+- [ ] PR title: `test infra: fixture factory, heap-bound helpers, JMH harness for streaming refactor`.
+
+---
+
+# Phase C — Switch metadata-only paths to `IncludeBulkData.URI`
 
 ## Goal
 
@@ -169,18 +355,93 @@ Group commits by module for clean history (`apps/web: switch ingest to URI mode`
 - `libs/dicom-xnat-mx/src/main/java/.../*.java`
 - `libs/dicomtools/src/main/java/.../*.java`
 
-## Phase B verification gate
+## Required tests for Phase C
+
+### C.test.1 — Unit tests for the `DicomReader` helper
+
+**File:** `libs/dicom-xnat/dicom-xnat-util/src/test/java/org/nrg/dicom/streaming/DicomReaderTest.java` (or wherever `DicomReader` lands per Phase A)
+
+Required test methods:
+
+| Method | Setup | Asserts |
+|---|---|---|
+| `readMetadata_returnsBulkDataPlaceholderForPixelData()` | 100 MB native multiframe via `LargeDicomFixtureFactory` | `attrs.getValue(Tag.PixelData) instanceof BulkData` |
+| `readMetadata_doesNotMaterializePixelBytes()` | same | `HeapBounds.assertHeapDeltaUnder(5_000_000, () -> readMetadata(file))` (5 MB cap on a 100 MB file) |
+| `readMetadata_pixelDataIsLazilyResolvable()` | same | after `readMetadata` returns, `((BulkData) attrs.getValue(PixelData)).toBytes(VR.OB, false)` returns the original bytes |
+| `readMetadata_workOnEncapsulatedFile()` | factory's JPEG 2000 multiframe | `attrs.getValue(PixelData) instanceof Fragments` (already encapsulated; no degradation) |
+| `readMetadata_throwsIOExceptionOnTruncatedFile()` | truncate a real DICOM at 1 KB | throws `IOException` with message containing the file path |
+| `readMetadata_throwsOnMalformedFileMetaInformation()` | corrupt FMI header | throws specific dcm4che exception (document which) |
+| `readMetadata_handlesMissingTransferSyntax()` | DICOM with no TS UID in FMI | reads using implicit VR LE default per dcm4che behaviour; no crash |
+| `readHeaderOnly_omitsPixelDataEntirely()` | 100 MB native multiframe | `attrs.getValue(PixelData) == null && !attrs.contains(PixelData)` |
+| `readHeaderOnly_isFasterThanReadMetadata()` | same; both in JMH-style timing | header-only avg latency < URI-mode avg latency (sanity check; not a correctness gate, just a regression alarm) |
+
+### C.test.2 — `BulkData` reference lifecycle
+
+**File:** `libs/dicom-xnat/dicom-xnat-util/src/test/java/org/nrg/dicom/streaming/BulkDataLifecycleTest.java`
+
+| Method | Asserts |
+|---|---|
+| `bulkDataResolves_afterAttributesPassesAcrossMethodBoundary()` | parse in method A, return Attributes, call `getValue(PixelData)` in method B → bytes match |
+| `bulkDataFailsCleanly_whenSourceFileDeleted()` | parse, delete source file, then `getValue(PixelData)` → throws `IOException` (not `NullPointerException`) |
+| `bulkDataFailsCleanly_whenSourceFileTruncated()` | parse, truncate file from underneath, then `getValue` → exception with offset/length context |
+| `bulkDataIsStable_acrossMultipleGetValueCalls()` | call `getValue(PixelData)` three times → returns equal bytes each time |
+| `bulkDataSurvivesAttributesSerialization()` | serialize the `Attributes` (Java serialization) and deserialize → BulkData URI still resolves |
+| `bulkDataConcurrentAccess_isSafe()` | 16 threads × 100 iterations each call `getValue(PixelData)` on the same `Attributes` instance → no `ConcurrentModificationException`, all return identical bytes |
+
+### C.test.3 — Heap-bound assertions on real ingest paths
+
+**File:** `apps/web/src/test/java/org/nrg/xnat/archive/IngestHeapBoundsTest.java`
+
+| Method | Asserts |
+|---|---|
+| `ingest500kCt_heapDeltaUnder2Mb()` | `HeapBounds.assertHeapDeltaUnder(2_000_000, () -> archiveService.ingest(file))` |
+| `ingest100MbMultiframe_heapDeltaUnder20Mb()` | same with 100 MB file, 20 MB cap (was: ~120 MB) |
+| `ingest1GbMultiframe_heapDeltaUnder50Mb()` | same with 1 GB file, 50 MB cap (was: would OOM in pre-refactor 2g heap) |
+| `ingestConcurrent_4parallelTimes100Mb_peakUnder200Mb()` | `HeapBounds.assertHeapPeakUnder(200_000_000, () -> ingestParallel(4, files))` |
+| `ingestConcurrent_10parallelTimes100Mb_peakUnder400Mb()` | same with 10 concurrent (was: ~1 GB peak) |
+| `ingestStress_100SequentialFiles_noLeak()` | ingest 100 × 50 MB files in a loop; after final `System.gc()`, heap usage is within 50 MB of pre-loop baseline (catches BulkData reference leaks) |
+
+### C.test.4 — Per-module migration verification
+
+For each module that gets a `new DicomInputStream` → `DicomReader` migration in Phase C, the module's existing test suite must remain green AND a new memory-bound test must be added.
+
+| Module | New test class | Asserts |
+|---|---|---|
+| `apps/web` | `XnatDicomIngestServiceTest.ingestUriModeRegression()` | full archive flow on a 100 MB native multiframe stays within 20 MB heap delta |
+| `libs/session-builders` | `SessionBuilderHeapBoundsTest.groupSessionUriMode()` | building a 1000-file session stays within 5 MB heap delta total |
+| `libs/prearc-importer` | `PrearcImporterHeapBoundsTest.importLargeStudyUriMode()` | importing a 1 GB study stays within 50 MB heap delta |
+| `libs/dicom-xnat/dicom-xnat-mx` | `DicomXnatMxHeapBoundsTest.processStudyUriMode()` | similar |
+| `libs/dicomtools` | `DicomToolsHeapBoundsTest.utilityCallsUriMode()` | covering each utility entry point |
+
+If a module is migrated but doesn't get a new heap-bound test, the gate fails.
+
+### C.test.5 — Smoke test against live stack
+
+**File:** `smoke-tests/test_streaming_ingest.py` (extends the existing pytest smoke suite)
+
+| Method | Asserts |
+|---|---|
+| `test_ingest_100mb_native_under_uri_mode()` | upload via `/data/services/import`; archive succeeds; assertion via `/xapi/admin/heap` (or similar) that pod heap stayed bounded |
+| `test_ingest_concurrent_4parallel()` | 4 parallel uploads via threadpool; all archive, none crash |
+
+These smoke tests run against the docker-compose stack (and EKS for cloud-deploy validation). Mark with `@pytest.mark.streaming` so they can be selected separately.
+
+## Phase C verification gate
 
 - [ ] `./gradlew build` clean
 - [ ] `./gradlew test` passes (no new failures vs main)
 - [ ] All M-classified sites in the audit are migrated; audit doc updated to mark them ✅
-- [ ] Smoke test: ingest a 100 MB native multiframe DICOM via `docker compose up -d` → archive succeeds, archive logs show no `byte[]` allocations near the file size (use `-XX:+PrintGCDetails` or just `jstat`).
-- [ ] Smoke test: ingest a 50 MB study of 100 small DICOMs concurrently (4 parallel uploads) without OOM. Pre-Phase-B baseline should also work for context; the win here is the heap headroom remaining.
-- [ ] No regression in DICOM ingest correctness — JUnit tests in `libs/dicom-xnat-*`, `libs/session-builders`, `libs/prearc-importer` all green.
+- [ ] **C.test.1** (`DicomReaderTest`) exists and all methods green.
+- [ ] **C.test.2** (`BulkDataLifecycleTest`) exists and all methods green.
+- [ ] **C.test.3** (`IngestHeapBoundsTest`) exists and all methods green; the `1Gb` and `10parallel` cases were pre-refactor red.
+- [ ] **C.test.4** every migrated module has its named heap-bound test class; all green.
+- [ ] **C.test.5** `smoke-tests/test_streaming_ingest.py` passes against `docker compose up -d`.
+- [ ] JMH benchmarks (from B.4) re-run; `ingest100MbNative` and `ingest1GbNative` show ≥ 5× heap-allocation reduction vs the Phase A baseline.
+- [ ] `forbiddenApisMain` allow-list still only contains `DicomReader.java` (no escape hatches added).
 
 ---
 
-# Phase C — Refactor pixel-touching paths to per-frame streaming
+# Phase D — Refactor pixel-touching paths to per-frame streaming
 
 ## Goal
 
@@ -212,21 +473,89 @@ Source files in scope:
 
 The reference upstream pattern is dcm4che's `Transcoder.transcode(...)` — it's already frame-by-frame. We don't need to copy that mechanism wholesale; we just need to ensure our handlers walk it that way too.
 
-### C.3 — Catalog-validation paths that read pixel offsets
+### D.3 — Catalog-validation paths that read pixel offsets
 
 `apps/web/.../catalog` may have code that touches pixel data for checksum validation or frame-count verification. Audit and switch to per-frame.
 
-## Phase C verification gate
+## Required tests for Phase D
+
+### D.test.1 — Per-frame redaction unit tests
+
+**File:** `libs/dicom-edit6/src/test/java/org/nrg/dicom/dicomedit/pixeledit/streaming/PerFrameRedactionTest.java`
+
+| Method | Setup | Asserts |
+|---|---|---|
+| `redactSingleFrame_inMultiframeStudy()` | 50-frame multiframe, redact 100×100 region in frame 5 only | frame 5 has redaction in the region; frames 0–4, 6–49 unchanged |
+| `redactAllFrames_byteIdenticalAcrossFrames()` | redact same region in every frame | every redacted region matches reference color exactly; non-redacted regions byte-identical to input |
+| `streamingDoesNotMaterializeWholeStudy()` | 1 GB multiframe, redact one frame | `HeapBounds.assertHeapDeltaUnder(50_000_000, ...)` — heap stays within ~one frame's worth (was: full study) |
+| `streamingHandlesEncapsulatedSource()` | JPEG 2000 multiframe input | per-frame access via `Transcoder.readFrame()` works without re-encoding non-redacted frames |
+| `streamingHandlesNativeSource()` | native multiframe input | per-frame slicing via BulkData byte ranges produces correct per-frame buffers (correct `rows × cols × bytesPerPixel × samplesPerPixel` math) |
+
+### D.test.2 — Anonymization output-parity tests
+
+**File:** `libs/dicom-edit6/src/test/java/org/nrg/dicom/dicomedit/mizer/AnonymizationOutputParityTest.java`
+
+The pre-refactor outputs are captured as SHA-256 fixtures committed to `libs/dicom-edit6/src/test/resources/parity/`. The test runs the same scripts on the same inputs post-refactor and asserts identical SHA-256 of pixel bytes (header bytes may diverge legitimately due to anon rewrites; pixel bytes must match).
+
+| Method | Asserts |
+|---|---|
+| `siteAnonScript_pixelsByteIdentical()` | Run `SCRIPT_SITE` (no pixel-touching rules) on `dcm/multi-frame/us-evle-rgb-8bit.dcm`; output PixelData SHA-256 matches captured baseline |
+| `projectAnonScript_pixelsByteIdentical()` | same with `SCRIPT_PROJ` |
+| `redactionScript_pixelsMatchPreRefactorOutput()` | Run a pixel-redaction script captured as a fixture; output PixelData SHA-256 matches captured pre-refactor baseline |
+| `parityFixtures_existAndAreUpToDate()` | Boilerplate: assert each parity-fixture file has a corresponding test method, and vice versa, so missing fixtures fail loudly |
+
+### D.test.3 — Re-enabled `@Ignore`d tests as gate
+
+The four `PixelmedPixelEditHandlerTest.multiframe_*` tests un-`@Ignore`'d as part of Phase D's PR. The PR cannot merge unless all four pass.
+
+| Test | Re-enable | Expected pass condition |
+|---|---|---|
+| `multiframe_evle_rgb_8bit` | remove `@Ignore` | passes — validator now streams per frame, no OOM |
+| `multiframe_rle_8bit` | remove `@Ignore` | **may still need fixing** — root cause was ImageJ codec, not memory; if streaming exposes a different blocker, document and possibly leave `@Ignore` with updated comment |
+| `multiframe_rle_pal_8bit` | same | same |
+| `multiframe_jpeg1` | same | same |
+
+**Implementing agent:** at minimum `multiframe_evle_rgb_8bit` MUST come off `@Ignore`. The other three may stay ignored ONLY if the streaming refactor truly didn't address their root cause; in that case the `@Ignore` comment must be updated to remove the false-but-now-dated "validator can't keep up" framing.
+
+A guard test ensures the un-`@Ignore`-ing was real:
+
+**File:** `libs/dicom-edit6/src/test/java/org/nrg/dicom/dicomedit/pixeledit/impl/PixelmedPixelEditHandlerTest.java`
+
+Add a meta-test:
+
+```java
+@Test
+public void evleRgbMultiframeMustNotBeIgnored() throws NoSuchMethodException {
+    Method m = PixelmedPixelEditHandlerTest.class.getMethod("multiframe_evle_rgb_8bit");
+    assertNull("Phase D regression: multiframe_evle_rgb_8bit was re-@Ignore'd",
+               m.getAnnotation(Ignore.class));
+}
+```
+
+This one-line guard prevents future agents from silently re-`@Ignore`-ing the test if it starts failing.
+
+### D.test.4 — Live-stack smoke
+
+`smoke-tests/test_streaming_redaction.py`:
+
+| Method | Asserts |
+|---|---|
+| `test_redact_large_multiframe_e2e()` | upload 200 MB multiframe → run a redaction script via XNAT REST → download → confirm bytes in the redacted region match expected, others unchanged, heap stable on server |
+
+## Phase D verification gate
 
 - [ ] `./gradlew build` clean
 - [ ] `./gradlew test` passes
-- [ ] **All four currently-`@Ignore`d `PixelmedPixelEditHandlerTest.multiframe_*` tests can be re-enabled** — their underlying root cause was always memory pressure from up-front pixel loading. (If `multiframe_evle_rgb_8bit` still OOMs after C.2, a heap or ImageJ-validator issue remains that's separate from this refactor; surface it.)
-- [ ] Smoke test: ingest the 475 MB `us-evle-rgb-8bit.dcm` fixture as a real archive operation → succeeds with stable heap.
-- [ ] Smoke test: anonymize a > 2 GB native DICOM with a script that includes pixel redaction → succeeds with stable heap.
+- [ ] **D.test.1** (`PerFrameRedactionTest`) exists and all methods green.
+- [ ] **D.test.2** (`AnonymizationOutputParityTest`) exists and all methods green; parity-fixture corpus committed to `libs/dicom-edit6/src/test/resources/parity/`.
+- [ ] **D.test.3** at minimum `multiframe_evle_rgb_8bit` is un-`@Ignore`'d AND green; the meta-guard test (`evleRgbMultiframeMustNotBeIgnored`) passes.
+- [ ] **D.test.4** `smoke-tests/test_streaming_redaction.py` passes.
+- [ ] JMH `ingestOver2GbNative` benchmark from B.4 now succeeds (was: would have OOM'd pre-refactor).
+- [ ] `forbiddenApisMain` allow-list updated only to allow the new per-frame-streaming entry points (no escape hatches re-introduced for general `DicomInputStream` usage).
 
 ---
 
-# Phase D — Retire `NativeDicomPreCompressor`
+# Phase E — Retire `NativeDicomPreCompressor`
 
 ## Goal
 
@@ -240,52 +569,155 @@ Once Phases B and C land, no XNAT code path materializes the full pixel `byte[]`
 4. Remove `runtimeOnly("com.sun.media:jai_imageio:1.2-pre-dr-b04")` from `apps/web/build.gradle.kts:279` if no other code path needs it (likely safe — Phase A audit will confirm).
 5. Add an ADR `docs/adr/0009-pixel-streaming-and-precompressor-retirement.md` documenting the refactor.
 
-## Phase D verification gate
+## Required tests for Phase E
+
+### E.test.1 — Byte-identical roundtrip
+
+**File:** `apps/web/src/test/java/org/nrg/xnat/archive/ByteIdenticalRoundTripTest.java`
+
+| Method | Asserts |
+|---|---|
+| `roundtrip_100MbNative_pixelsByteIdentical()` | ingest 100 MB native multiframe → archive → download → `Sha256Checksum.ofPixelData(downloaded) == Sha256Checksum.ofPixelData(original)` |
+| `roundtrip_over2GbNative_pixelsByteIdentical()` | same with > 2 GB fixture (was impossible pre-refactor; pre-compressor would have lossless-but-not-byte-identical-converted to JPEG 2000) |
+| `roundtrip_native_transferSyntaxPreserved()` | post-archive file's `(0002,0010) Transfer Syntax UID` equals input's (was: native input got rewritten to `1.2.840.10008.1.2.4.90` JPEG 2000 by the pre-compressor) |
+| `roundtrip_jpeg2000Native_pixelsByteIdentical()` | input that's already JPEG 2000 — passthrough behaviour preserved |
+
+### E.test.2 — Legacy pre-compressed readback
+
+Files in existing archives that were already pre-compressed by the (now-deleted) `NativeDicomPreCompressor` must remain readable. The test commits a fixture that mimics a "legacy pre-compressed" archive entry (ingest one, capture the post-compression file as a test resource) and asserts it still reads correctly post-refactor.
+
+**File:** `apps/web/src/test/java/org/nrg/xnat/archive/LegacyPreCompressedReadbackTest.java`
+
+| Method | Asserts |
+|---|---|
+| `legacyJpeg2000File_readsCorrectly()` | a fixture file in JPEG 2000 Lossless transfer syntax (created via the old `NativeDicomPreCompressor` and committed to test resources) reads cleanly with `DicomReader.readMetadata` and the pixel data resolves via `BulkData` |
+| `legacyJpeg2000File_pixelsRoundtrip()` | reading + re-writing the legacy file produces byte-identical pixel data (no double-encoding) |
+| `legacyJpeg2000File_archiveDownload_succeeds()` | end-to-end: legacy file in archive → download via XNAT REST → succeeds, bytes match |
+
+### E.test.3 — External-tool compatibility
+
+**File:** `apps/web/src/test/java/org/nrg/xnat/archive/ExternalToolReadbackTest.java`
+
+Uses an external DICOM library (a test-scope dep on `pixelmed` — already in the build for production use, so no new dependency) to validate that files written by the post-refactor archive flow are decodable outside dcm4che.
+
+| Method | Asserts |
+|---|---|
+| `pixelmedReadsArchivedFile()` | after archive, `com.pixelmed.dicom.AttributeList` opens the archived file, finds expected tags, decodes pixel data |
+| `headerTagsByteIdenticalAcrossDcm4cheAndPixelmed()` | both libraries return the same patient/study/series IDs |
+| `pixelDataDecodesIdenticallyAcrossLibraries()` | both libraries return identical pixel arrays for a fixture |
+
+(Optional, Python-side verification: a `smoke-tests/test_external_pydicom.py` that calls `pydicom.dcmread` on archived files via the live XNAT instance. Adds runtime dependency on pydicom, which `smoke-tests/requirements.txt` already has.)
+
+### E.test.4 — Build / packaging assertions
+
+| Gate | How |
+|---|---|
+| WAR is smaller post-refactor | `du -sh apps/web/build/libs/*.war` pre-refactor stored in PR description; post-refactor at least 5 MB smaller (jai_imageio + JJ2000 dropped) |
+| `NativeDicomPreCompressor` truly gone | `find . -name 'NativeDicomPreCompressor*' \| wc -l` returns 0 |
+| `jai_imageio` no longer in runtime classpath | `unzip -l apps/web/build/libs/*.war | grep -i jai_imageio` returns nothing |
+| All references removed from code + docs | `grep -r "NativeDicomPreCompressor\|jai_imageio" --include="*.java" --include="*.md" --include="*.kts"` returns only the ADR explaining the deletion |
+
+## Phase E verification gate
 
 - [ ] Pre-compressor source file is deleted.
-- [ ] No references to `NativeDicomPreCompressor` remain in the codebase (`grep -r "NativeDicomPreCompressor" .`).
-- [ ] `./gradlew :apps:web:war` produces a smaller WAR (J2K codec gone, ~5-10 MB lighter — verify via `du -sh apps/web/build/libs/*.war`).
-- [ ] Smoke test: ingest a > 2 GB native DICOM → succeeds without pre-compression. **Critically: file on disk after archive is byte-identical to the original** (modulo any header rewrites from anonymization).
+- [ ] No references to `NativeDicomPreCompressor` remain in the codebase (`grep -r "NativeDicomPreCompressor" .` only matches the ADR).
+- [ ] `./gradlew :apps:web:war` produces a smaller WAR (J2K codec gone, ~5–10 MB lighter — verify via `du -sh apps/web/build/libs/*.war`).
+- [ ] **E.test.1** (`ByteIdenticalRoundTripTest`) exists and all methods green.
+- [ ] **E.test.2** (`LegacyPreCompressedReadbackTest`) exists and all methods green; legacy fixture committed.
+- [ ] **E.test.3** (`ExternalToolReadbackTest`) exists and all methods green.
+- [ ] **E.test.4** packaging assertions pass.
+- [ ] Smoke test: ingest a > 2 GB native DICOM → succeeds without pre-compression. **Critically: file on disk after archive is byte-identical to the original** (modulo header rewrites from anonymization).
 - [ ] Smoke test: ingest a 100 MB native DICOM, then download → bytes match the original input file.
 - [ ] ADR 0009 written and reviewed.
 
 ---
 
-# Phase E — Verification + benchmarks
+# Phase F — Verification + benchmarks publishing
 
 ## Goal
 
-Quantify the win, document it, set up regression detection.
+Publish the win, lock it in with regression detection. The benchmark *harness* was built in Phase B; here we run it pre vs post and document the result.
 
 ## Tasks
 
-### E.1 — Benchmark harness
+### F.1 — Capture and publish benchmark numbers
 
-Add `apps/web/src/test/.../IngestBenchmarkTest.java` (or similar) that measures heap-allocated bytes during a single-file ingest, parameterized by file size. Use JMH or a simpler `Runtime.getRuntime().totalMemory() - freeMemory()` snapshot before/after.
+Run the JMH harness from B.4 against:
 
-Required scenarios:
-- Single 500 KB CT ingest
-- Single 100 MB multiframe US ingest
-- Single 1 GB native ingest (assert heap stays under, say, 50 MB attributable to the operation)
-- 10 concurrent 100 MB ingests (assert peak heap doesn't exceed (10 + a few) × header_size)
+1. `main` at the head of Phase A's audit commit (pre-refactor baseline)
+2. `main` at the head of Phase E's merge commit (post-refactor)
 
-Capture pre-refactor numbers from `main` for comparison. Land alongside Phase B/C work; this is what justifies the change.
+Commit both result files to `apps/web/jmh/baseline.json` and `apps/web/jmh/post-refactor.json`. The CI regression gate from B.6 uses `baseline.json` as the watermark; future PRs that regress > 20% on heap-allocation per ingest fail the build.
 
-### E.2 — README + ADR updates
+### F.2 — README + ADR updates
 
-- `README.md`: brief mention under "DICOM ingest" or "Tomcat 10" section that XNAT now streams pixel data; cite ADR 0009.
-- `docs/adr/0009-...`: full architectural narrative — what the pre-compressor was, why it existed, what replaced it, byte-fidelity preservation.
+- `README.md`: brief mention under "DICOM ingest" / "Tomcat 10" section that XNAT now streams pixel data; cite ADR 0009.
+- `docs/adr/0009-pixel-streaming-and-precompressor-retirement.md`: full architectural narrative — what the pre-compressor was, why it existed, what replaced it, byte-fidelity preservation, before/after benchmark numbers.
 - `docs/plan-tomcat10-eks-tests.md`: if it referenced the pre-compressor, update.
+- `docs/adr/0006-eks-deployment-target.md`: the "Bring-up Notes" section may need a small update if anything about the deploy assumed pre-compression behaviour.
 
-### E.3 — Lint rule (optional)
+### F.3 — Confirm CI regression gate is wired
 
-Add a custom checkstyle / PMD rule that flags new uses of `new DicomInputStream(...)` outside `DicomReader` or other approved locations. Prevents the eager-load pattern from creeping back in.
+The lint rule (B.5) and JMH-comparison gate (B.6) were built in Phase B but only became *meaningful* after Phase C migrations landed. Verify in F:
 
-## Phase E verification gate
+- A synthetic test PR that adds `new DicomInputStream(...)` outside the allow-list **fails** `./gradlew forbiddenApisMain`.
+- A synthetic test PR that increases heap allocation per ingest by 50% **fails** the CI benchmark comparison step.
 
-- [ ] Benchmark harness runs in CI (or as a manual `./gradlew benchmark` task) and produces a JUnit-style report.
-- [ ] Heap-allocation reduction is documented (~100×) for typical sizes; OOM-elimination is documented for > 2 GB.
+Document the synthetic-PR test results in the ADR.
+
+### F.4 — Cross-cutting test sanity
+
+Re-run the full test corpus once Phases B–E have all merged:
+
+- `./gradlew test` — all module unit tests green.
+- `./gradlew :apps:web:jmh` — full JMH suite, results captured.
+- `cd smoke-tests && pytest -v` — local stack smoke suite green.
+- Cloud Deploy (`workflow_dispatch`) — single-EC2 smoke suite green.
+- EKS Deploy (`workflow_dispatch`) — EKS smoke suite green.
+
+## Required tests for Phase F
+
+Phase F itself doesn't add new test classes — it *exercises* what B–E built. The verification gate is empirical: run the benchmarks, capture numbers, lock the gate.
+
+## Phase F verification gate
+
+- [ ] `apps/web/jmh/baseline.json` and `apps/web/jmh/post-refactor.json` both committed.
+- [ ] Heap-allocation reduction documented in ADR 0009 — table form, all five JMH scenarios from B.4.
+- [ ] OOM-elimination documented for > 2 GB case (the `ingestOver2GbNative` benchmark went from "throws" to "succeeds with ~5 MB heap delta").
+- [ ] Synthetic-regression-PR test confirms `forbiddenApisMain` catches re-introduced eager `DicomInputStream`.
+- [ ] Synthetic-regression-PR test confirms CI benchmark gate catches a 50% allocation regression.
+- [ ] `./gradlew test`, `./gradlew :apps:web:jmh`, `pytest smoke-tests/`, Cloud Deploy, EKS Deploy — all green on the post-refactor commit.
 - [ ] ADR 0009 merged.
+
+---
+
+# Cross-phase summary: test deliverables
+
+For quick reference, the test files that must exist by the end of Phase E (Phase F adds none of its own):
+
+| Phase | Test class / file | Purpose |
+|---|---|---|
+| B | `LargeDicomFixtureFactoryTest` | Synthetic-DICOM generator self-test |
+| B | `HeapBoundsTest` | Heap-bound assertion helper self-test |
+| B | `Sha256ChecksumTest` | Checksum helper self-test |
+| B | `apps/web/src/jmh/.../DicomIngestBenchmark` | JMH harness, 5 ingest scenarios |
+| B | `forbiddenApisMain` Gradle task | Lint rule preventing eager `DicomInputStream` |
+| C | `DicomReaderTest` | URI-mode helper unit tests (9 methods) |
+| C | `BulkDataLifecycleTest` | BulkData reference lifecycle (6 methods) |
+| C | `IngestHeapBoundsTest` | Heap-bound assertions on ingest paths (6 methods) |
+| C | `XnatDicomIngestServiceTest.ingestUriModeRegression` + 4 module-specific heap-bound tests | Per-module regression coverage |
+| C | `smoke-tests/test_streaming_ingest.py` | Live-stack smoke (2 methods) |
+| D | `PerFrameRedactionTest` | Per-frame streaming unit tests (5 methods) |
+| D | `AnonymizationOutputParityTest` | Pre/post pixel-byte parity (4 methods) + parity-fixture corpus in `libs/dicom-edit6/src/test/resources/parity/` |
+| D | `PixelmedPixelEditHandlerTest.evleRgbMultiframeMustNotBeIgnored` | Meta-guard against re-`@Ignore`-ing the canary |
+| D | `smoke-tests/test_streaming_redaction.py` | Live-stack redaction smoke |
+| E | `ByteIdenticalRoundTripTest` | Pixel-byte fidelity across archive + retrieval (4 methods) |
+| E | `LegacyPreCompressedReadbackTest` | Pre-existing JPEG-2000 archives still readable (3 methods) |
+| E | `ExternalToolReadbackTest` | Pixelmed-side roundtrip parity (3 methods) |
+
+Total: ~15 new test classes, ~50 new test methods, plus the JMH benchmark, lint rule, smoke-test additions, and parity-fixture corpus.
+
+---
 
 ---
 
