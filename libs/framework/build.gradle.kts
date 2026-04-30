@@ -119,6 +119,14 @@ dependencies {
     // never fires, and `ignoredField` shows up in the JSON map.
     testAnnotationProcessor(sourceSets.main.get().output)
     testAnnotationProcessor("org.kohsuke.metainf-services:metainf-services:1.11")
+    // SLF4J on the processor classpath. Javac loads EVERY Processor declared
+    // in META-INF/services/javax.annotation.processing.Processor, not just
+    // the ones whose @SupportedAnnotationTypes match. XnatPluginAnnotationProcessor
+    // (same package as XnatMixInAnnotationProcessor) is annotated @Slf4j —
+    // class init calls LoggerFactory.getLogger(...). Without slf4j-api on
+    // the processor path, that init throws NoClassDefFoundError and
+    // compileTestJava fails before any annotation is even seen.
+    testAnnotationProcessor(libs.slf4j.api)
 
     // --- Provided ---
     compileOnly(libs.h2)
