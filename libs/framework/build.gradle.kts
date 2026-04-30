@@ -110,23 +110,26 @@ dependencies {
 
     // --- Test annotation processors ---
     // SimpleBean (under src/test/java) is annotated with @XnatMixIn. The
-    // processor that turns @XnatMixIn into META-INF/xnat/serializers/*.
-    // properties files lives in this module's own main code, so we need
-    // sourceSets.main.output on the test annotation-processor path to
-    // make it discoverable when compileTestJava runs. Without this,
-    // testAnnotatedMixIn fails: no mixin properties file is generated,
-    // SerializerService can't register SimpleBeanMixIn, the @JsonIgnore
-    // never fires, and `ignoredField` shows up in the JSON map.
-    testAnnotationProcessor(sourceSets.main.get().output)
+    // XnatMixInAnnotationProcessor that turns it into
+    // META-INF/xnat/serializers/*-mixin.properties files lives in this
+    // module's own main code, so we need that classpath on the test
+    // annotation-processor path to make it discoverable when
+    // compileTestJava runs. Without this, testAnnotatedMixIn fails: no
+    // mixin properties file is generated, SerializerService can't
+    // register SimpleBeanMixIn, the @JsonIgnore never fires, and
+    // `ignoredField` shows up in the JSON map.
+    //
+    // Use runtimeClasspath rather than just main.output because javac
+    // loads EVERY processor declared in
+    // META-INF/services/javax.annotation.processing.Processor, not only
+    // the ones whose @SupportedAnnotationTypes match the source being
+    // compiled. The other processors in this package
+    // (XnatPluginAnnotationProcessor, NrgAbstractAnnotationProcessor)
+    // reference SLF4J and commons-lang3; the kohsuke metainf-services
+    // jar has to be there too. runtimeClasspath captures all of those
+    // in one shot and stays correct as the processors evolve.
+    testAnnotationProcessor(sourceSets.main.get().runtimeClasspath)
     testAnnotationProcessor("org.kohsuke.metainf-services:metainf-services:1.11")
-    // SLF4J on the processor classpath. Javac loads EVERY Processor declared
-    // in META-INF/services/javax.annotation.processing.Processor, not just
-    // the ones whose @SupportedAnnotationTypes match. XnatPluginAnnotationProcessor
-    // (same package as XnatMixInAnnotationProcessor) is annotated @Slf4j —
-    // class init calls LoggerFactory.getLogger(...). Without slf4j-api on
-    // the processor path, that init throws NoClassDefFoundError and
-    // compileTestJava fails before any annotation is even seen.
-    testAnnotationProcessor(libs.slf4j.api)
 
     // --- Provided ---
     compileOnly(libs.h2)
