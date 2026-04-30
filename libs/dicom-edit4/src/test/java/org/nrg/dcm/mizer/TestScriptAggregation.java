@@ -55,6 +55,15 @@ public class TestScriptAggregation {
         elements.put("project", "XNAT_01");
         elements.put("subject", "XNAT_01_01");
         elements.put("modalityLabel", "MR");
+        // SCRIPT_PROJ contains `session := makeSessionLabel[...]` — a
+        // script-local assignment that nonetheless surfaces `session` in
+        // applicator.getVariables(). DE4Mizer.anonymizeImpl pre-flight
+        // requires every such variable to have an external value, which
+        // makes seeding it here mandatory even though the `:=` overwrites
+        // before the value is used. The "correct" fix is in the upstream
+        // org.nrg.dicom:mizer library (the var resolver should distinguish
+        // script-assigned from externally-required) — separate effort.
+        elements.put("session", "");
         final List<MizerContext> contexts  = Arrays.<MizerContext>asList(new MizerContextWithScript(0L, SCRIPT_SITE, elements), new MizerContextWithScript(0L, SCRIPT_PROJ, elements));
         final Set<Variable>      variables = _service.getReferencedVariables(contexts);
         assertNotNull(variables);
