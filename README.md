@@ -230,6 +230,6 @@ xnat-monorepo/                    <- repo root
 
 ## License
 
-Copyright (c) 2026 Washington University and Radiological Society of North America (RSNA).
+Copyright (c) 2026 Washington University
 
 Distributed under the **Simplified BSD (2-Clause) License**. See [LICENSE](LICENSE) for details.
