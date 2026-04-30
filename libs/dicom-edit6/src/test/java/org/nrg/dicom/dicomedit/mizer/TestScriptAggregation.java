@@ -55,6 +55,12 @@ public class TestScriptAggregation {
         elements.put("project", "XNAT_01");
         elements.put("subject", "XNAT_01_01");
         elements.put("modalityLabel", "MR");
+        // SCRIPT_PROJ contains `session := "XNAT_01_01_MR1"` — a script-local
+        // assignment that nonetheless surfaces in applicator.getVariables() and
+        // trips the mizer's pre-flight "every variable needs an external value"
+        // check. Mirror the dicom-edit4 fix from PR #29: seed `session` so
+        // pre-flight passes; the script's `:=` overwrites before use.
+        elements.put("session", "");
         final List<MizerContext> contexts  = Arrays.<MizerContext>asList(new MizerContextWithScript(0L, SCRIPT_SITE, elements), new MizerContextWithScript(0L, SCRIPT_PROJ, elements));
         final Set<Variable>      variables = _service.getReferencedVariables(contexts);
         assertNotNull(variables);
