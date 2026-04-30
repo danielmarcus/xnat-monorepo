@@ -108,9 +108,13 @@ tasks.named("javadocJar") {
 // BasePixelDataValidator over a multiframe RGB-8 DICOM, which loads the
 // full pixel array into memory in createPixelValue. With the convention
 // plugin's default maxHeapSize=2g it OOMs at validator construction.
-// Multiframe RGB images can run several hundred MB; bump to 4g for this
-// module so the validator has room. Mirrors the libs/config heap bump
-// from PR #24 — same shape, same rationale.
-tasks.withType<Test>().configureEach {
-    maxHeapSize = "4g"
+//
+// First attempt at 4g via `tasks.withType<Test>().configureEach {}` either
+// didn't apply (configureEach ordering) or wasn't enough; PR validation
+// after PR #30 still hit the same OOM at the same line. Use `tasks.test`
+// which configures the task explicitly + bump to 6g; multiframe RGB-8
+// images can be > 1 GB after Java object overhead. Mirrors the libs/config
+// per-module heap pattern from PR #24, just sized larger.
+tasks.test {
+    maxHeapSize = "6g"
 }
