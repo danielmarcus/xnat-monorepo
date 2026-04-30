@@ -53,6 +53,24 @@ configurations.all {
     exclude(group = "xerces")
     exclude(group = "xml-apis")
     exclude(group = "xalan")
+
+    // slf4j-log4j12 is a binding (SLF4J -> log4j). XNAT also ships
+    // log4j-over-slf4j (log4j API -> SLF4J). Having both on the classpath
+    // creates an infinite delegation loop, which SLF4J's StaticLoggerBinder
+    // detects at init and throws:
+    //
+    //   IllegalStateException: Detected both log4j-over-slf4j.jar AND
+    //   bound slf4j-log4j12.jar on the class path, preempting StackOverflowError.
+    //
+    // Several transitive deps drag in slf4j-log4j12. apps/web and
+    // build-tools/xnat-data-models already exclude it inline; centralise
+    // here so every library module is safe. Without this,
+    // libs/prearc-importer's UncompressorTest (instantiates a
+    // LoggerStatusReporter on first use) hits the loop on first
+    // LoggerFactory.getLogger() call. The same pattern likely affected
+    // libs/dicom-edit4 and libs/dicom-edit6 tests via Spring's logger
+    // init at @ContextConfiguration bootstrap.
+    exclude(group = "org.slf4j", module = "slf4j-log4j12")
 }
 
 // ---------------------------------------------------------------------------
