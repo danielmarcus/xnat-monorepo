@@ -103,18 +103,3 @@ tasks.named<Jar>("sourcesJar") {
 tasks.named("javadocJar") {
     dependsOn(generateGrammarSource)
 }
-
-// PixelmedPixelEditHandlerTest.multiframe_evle_rgb_8bit constructs a
-// BasePixelDataValidator over a multiframe RGB-8 DICOM, which loads the
-// full pixel array into memory in createPixelValue. With the convention
-// plugin's default maxHeapSize=2g it OOMs at validator construction.
-//
-// First attempt at 4g via `tasks.withType<Test>().configureEach {}` either
-// didn't apply (configureEach ordering) or wasn't enough; PR validation
-// after PR #30 still hit the same OOM at the same line. Use `tasks.test`
-// which configures the task explicitly + bump to 6g; multiframe RGB-8
-// images can be > 1 GB after Java object overhead. Mirrors the libs/config
-// per-module heap pattern from PR #24, just sized larger.
-tasks.test {
-    maxHeapSize = "6g"
-}
